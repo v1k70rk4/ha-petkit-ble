@@ -62,19 +62,58 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         discovered_devices = await self._get_discovered_devices()
         
         if not discovered_devices:
-            return self.async_abort(reason="no_devices_found")
+            return await self.async_step_manual()
 
         # Create the selection schema
         device_options = {
             address: f"{service_info.name} ({address})"
             for address, service_info in discovered_devices.items()
         }
+        device_options["manual"] = "Enter MAC address manually"
+
+        if user_input is not None and user_input[CONF_ADDRESS] == "manual":
+            return await self.async_step_manual()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_ADDRESS): vol.In(device_options),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle manual entry of MAC address."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            address = user_input[CONF_ADDRESS]
+            await self.async_set_unique_id(format_mac(address))
+            self._abort_if_unique_id_configured()
+
+            # Test connection if possible, but allow configuration even if test fails
+            connection_tested = await self._test_connection(address)
+            if not connection_tested:
+                _LOGGER.warning(
+                    f"Could not verify connection to {address}, but allowing configuration. "
+                    "Device may not be in range or powered on."
+                )
+            
+            return self.async_create_entry(
+                title=f"Petkit Water Fountain ({address})",
+                data={CONF_ADDRESS: address},
+                options={CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL},
+            )
+
+        return self.async_show_form(
+            step_id="manual",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ADDRESS): cv.string,
                 }
             ),
             errors=errors,
@@ -154,7 +193,7 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             # Check if device is present in HA's bluetooth discovery
             if not bluetooth.async_address_present(self.hass, address, connectable=True):
-                _LOGGER.error(f"Device {address} not present in HA bluetooth")
+                _LOGGER.warning(f"Device {address} not present in HA bluetooth with connectable=True")
                 return False
             
             # Get BLE device from HA's bluetooth integration
@@ -163,7 +202,7 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             
             if not ble_device:
-                _LOGGER.error(f"Device {address} not found in HA bluetooth")
+                _LOGGER.warning(f"Device {address} not found in HA bluetooth with connectable=True")
                 return False
             
             # Device is discoverable and has a BLE device object, consider it connectable
