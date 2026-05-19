@@ -8,6 +8,13 @@
           "address": "Device"
         }
       },
+      "manual": {
+        "title": "Manual Device Setup",
+        "description": "Enter the MAC address of your Petkit water fountain.",
+        "data": {
+          "address": "MAC Address"
+        }
+      },
       "bluetooth_confirm": {
         "title": "Confirm Petkit BLE Device",
         "description": "Do you want to set up {name} ({address})?"
@@ -31,6 +38,108 @@
         "description": "Configure your Petkit BLE water fountain settings.",
         "data": {
           "update_interval": "Data update interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "filter_remaining": {
+        "name": "Filter Remaining"
+      },
+      "filter_days_left": {
+        "name": "Filter Days Left"
+      },
+      "pump_total_runtime": {
+        "name": "Pump Total Runtime"
+      },
+      "pump_today_runtime": {
+        "name": "Pump Today Runtime"
+      },
+      "total_water_purified": {
+        "name": "Total Water Purified"
+      },
+      "water_purified_today": {
+        "name": "Water Purified Today"
+      },
+      "energy_consumption": {
+        "name": "Energy Consumption"
+      },
+      "signal_strength": {
+        "name": "Signal Strength"
+      },
+      "voltage": {
+        "name": "Voltage"
+      },
+      "connection": {
+        "name": "Connection",
+        "state": {
+          "connected": "Connected",
+          "connecting": "Connecting",
+          "disconnected": "Disconnected",
+          "reconnecting": "Reconnecting",
+          "failed": "Failed",
+          "unknown": "Unknown"
+        }
+      },
+      "connection_attempts": {
+        "name": "Connection Attempts"
+      },
+      "last_seen": {
+        "name": "Last Seen"
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Power"
+      },
+      "smart_mode": {
+        "name": "Smart Mode"
+      }
+    },
+    "button": {
+      "reset_filter": {
+        "name": "Reset Filter"
+      }
+    },
+    "binary_sensor": {
+      "filter_problem": {
+        "name": "Filter Problem"
+      },
+      "water_missing": {
+        "name": "Water Missing"
+      },
+      "breakdown": {
+        "name": "Breakdown"
+      },
+      "running": {
+        "name": "Running"
+      }
+    }
+  },
+  "services": {
+    "reset_filter": {
+      "name": "Reset filter",
+      "description": "Reset the water filter life indicator"
+    },
+    "set_device_config": {
+      "name": "Set device configuration",
+      "description": "Configure device settings like LED brightness and smart mode timing",
+      "fields": {
+        "smart_time_on": {
+          "name": "Smart mode on time",
+          "description": "Minutes for smart mode on duration"
+        },
+        "smart_time_off": {
+          "name": "Smart mode off time",
+          "description": "Minutes for smart mode off duration"
+        },
+        "led_brightness": {
+          "name": "LED brightness",
+          "description": "LED brightness level (0-100)"
         }
       }
     }

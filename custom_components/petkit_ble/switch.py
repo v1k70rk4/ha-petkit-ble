@@ -30,12 +30,13 @@ async def async_setup_entry(
 
 class PetkitSwitchBase(CoordinatorEntity[PetkitBLECoordinator], SwitchEntity):
     """Base class for Petkit switches."""
-    
+
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the switch."""
         super().__init__(coordinator)
-        # Device info will be provided by the dynamic property
-    
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info dynamically."""
@@ -57,7 +58,7 @@ class PetkitPowerSwitch(PetkitSwitchBase):
         super().__init__(coordinator)
         device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
         self._attr_unique_id = f"{device_id}_power"
-        self._attr_name = "Power"
+        self._attr_translation_key = "power"
         self._attr_icon = "mdi:power"
     
     @property
@@ -86,7 +87,7 @@ class PetkitSmartModeSwitch(PetkitSwitchBase):
         super().__init__(coordinator)
         device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
         self._attr_unique_id = f"{device_id}_smart_mode"
-        self._attr_name = "Smart Mode"
+        self._attr_translation_key = "smart_mode"
         self._attr_icon = "mdi:brain"
     
     @property

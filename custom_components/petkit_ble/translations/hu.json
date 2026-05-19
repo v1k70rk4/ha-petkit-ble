@@ -1,0 +1,147 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Petkit BLE ivókút beállítása",
+        "description": "Válasszon a felderített Petkit ivókutak közül.",
+        "data": {
+          "address": "Eszköz"
+        }
+      },
+      "manual": {
+        "title": "Kézi beállítás",
+        "description": "Adja meg a Petkit ivókút MAC-címét.",
+        "data": {
+          "address": "MAC-cím"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Petkit BLE-eszköz megerősítése",
+        "description": "Szeretné beállítani ezt az eszközt: {name} ({address})?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Nem sikerült csatlakozni az eszközhöz. Ellenőrizze, hogy az eszköz be van-e kapcsolva és hatótávolságon belül van-e.",
+      "unknown": "Ismeretlen hiba történt."
+    },
+    "abort": {
+      "already_configured": "Ez az eszköz már be van állítva.",
+      "no_devices_found": "Nem található Petkit BLE-eszköz. Ellenőrizze, hogy az eszköz be van-e kapcsolva és felderíthető állapotban van-e.",
+      "not_supported": "Ez az eszköz nem támogatott Petkit ivókút.",
+      "cannot_connect": "Nem sikerült csatlakozni az eszközhöz."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Petkit BLE beállításai",
+        "description": "Adja meg a Petkit BLE ivókút beállításait.",
+        "data": {
+          "update_interval": "Frissítési időköz másodpercben"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Akkumulátor"
+      },
+      "filter_remaining": {
+        "name": "Szűrő állapota"
+      },
+      "filter_days_left": {
+        "name": "Szűrő hátralévő napjai"
+      },
+      "pump_total_runtime": {
+        "name": "Szivattyú teljes üzemideje"
+      },
+      "pump_today_runtime": {
+        "name": "Szivattyú mai üzemideje"
+      },
+      "total_water_purified": {
+        "name": "Szűrt víz összesen"
+      },
+      "water_purified_today": {
+        "name": "Szűrt víz ma"
+      },
+      "energy_consumption": {
+        "name": "Energiafogyasztás"
+      },
+      "signal_strength": {
+        "name": "Jelerősség"
+      },
+      "voltage": {
+        "name": "Feszültség"
+      },
+      "connection": {
+        "name": "Kapcsolati állapot",
+        "state": {
+          "connected": "Csatlakozva",
+          "connecting": "Csatlakozás",
+          "disconnected": "Lecsatlakozva",
+          "reconnecting": "Újracsatlakozás",
+          "failed": "Sikertelen",
+          "unknown": "Ismeretlen"
+        }
+      },
+      "connection_attempts": {
+        "name": "Csatlakozási kísérletek"
+      },
+      "last_seen": {
+        "name": "Utolsó észlelés"
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Tápellátás"
+      },
+      "smart_mode": {
+        "name": "Okos mód"
+      }
+    },
+    "button": {
+      "reset_filter": {
+        "name": "Szűrő visszaállítása"
+      }
+    },
+    "binary_sensor": {
+      "filter_problem": {
+        "name": "Szűrőhiba"
+      },
+      "water_missing": {
+        "name": "Vízhiány"
+      },
+      "breakdown": {
+        "name": "Meghibásodás"
+      },
+      "running": {
+        "name": "Üzemel"
+      }
+    }
+  },
+  "services": {
+    "reset_filter": {
+      "name": "Szűrő visszaállítása",
+      "description": "Visszaállítja a vízszűrő élettartam-jelzőjét."
+    },
+    "set_device_config": {
+      "name": "Eszközbeállítások megadása",
+      "description": "Beállítja az eszköz működését, például a LED fényerejét és az okos mód időzítését.",
+      "fields": {
+        "smart_time_on": {
+          "name": "Okos mód bekapcsolási ideje",
+          "description": "Az okos mód bekapcsolt állapotának időtartama percben."
+        },
+        "smart_time_off": {
+          "name": "Okos mód kikapcsolási ideje",
+          "description": "Az okos mód kikapcsolt állapotának időtartama percben."
+        },
+        "led_brightness": {
+          "name": "LED fényereje",
+          "description": "A LED fényerejének szintje 0 és 100 között."
+        }
+      }
+    }
+  }
+}
