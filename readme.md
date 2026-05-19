@@ -20,6 +20,7 @@ A Home Assistant integration for controlling Petkit W5 series water fountains vi
   - Control LED brightness and on/off schedules
   - Manage Do Not Disturb functionality
   - Reset filter and monitor its lifetime
+- **Multi-language Support**: English and Hungarian UI — easily extensible with new languages
 - **Home Assistant Services**: Advanced device configuration through HA services
 - **Energy Monitoring**: Track power consumption and runtime statistics
 - **Alerts**: Receive notifications for breakdowns, filter changes, and low water
@@ -85,6 +86,9 @@ The integration will create entities for:
 - Warning indicators (breakdown, filter, water missing)
 - DND (Do Not Disturb) state
 - Lock state
+
+#### Buttons
+- Reset filter — resets the water filter life indicator directly from the device card
 
 #### Switches
 - Power on/off
@@ -163,6 +167,20 @@ logger:
   logs:
     custom_components.petkit_ble: debug
 ```
+
+## Translations
+
+The integration supports multiple languages. Currently available:
+- **English** (default)
+- **Magyar / Hungarian**
+
+Home Assistant automatically selects the language based on your user profile settings.
+
+### Adding a new language
+
+1. Create a new JSON file in `custom_components/petkit_ble/translations/` named with the language code (e.g. `de.json` for German, `fr.json` for French)
+2. Copy the structure from `strings.json` and translate the values
+3. Restart Home Assistant
 
 ## Known Limitations
 
