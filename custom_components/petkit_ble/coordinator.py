@@ -363,6 +363,8 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def async_reset_filter(self) -> None:
         """Reset the device filter."""
         await self.commands.set_reset_filter()
+
+
         
     async def async_set_device_config(self, config_data: list) -> None:
         """Set device configuration."""

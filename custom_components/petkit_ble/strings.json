@@ -140,6 +140,18 @@
         "led_brightness": {
           "name": "LED brightness",
           "description": "LED brightness level (0-100)"
+        },
+        "led_switch": {
+          "name": "LED on/off",
+          "description": "Turn the LED indicator on or off"
+        },
+        "do_not_disturb": {
+          "name": "Do not disturb",
+          "description": "Enable or disable Do Not Disturb mode"
+        },
+        "is_locked": {
+          "name": "Child lock",
+          "description": "Lock or unlock the device buttons"
         }
       }
     }

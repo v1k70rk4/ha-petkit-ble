@@ -273,14 +273,15 @@ class Commands:
         type = 1                            # Type is 1 for sending - 2 for receiving
         seq = self.sequence                 # Example sequence number
         data = [0]                          # 0 resets it
-        
+
         bytes = Utils.build_command(seq, cmd, type, data)
         await self.ble_manager.message_producer(bytes)
-        
+
         self.increment_sequence()
-        
+
         self.logger.info(f"Queued command: {cmd}")
         return
+
 
     # Not used -- maybe never
     async def set_updated_light(self):

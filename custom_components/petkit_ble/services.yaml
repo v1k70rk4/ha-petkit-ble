@@ -29,3 +29,12 @@ set_device_config:
           min: 0
           max: 100
           unit_of_measurement: "%"
+    led_switch:
+      selector:
+        boolean:
+    do_not_disturb:
+      selector:
+        boolean:
+    is_locked:
+      selector:
+        boolean:

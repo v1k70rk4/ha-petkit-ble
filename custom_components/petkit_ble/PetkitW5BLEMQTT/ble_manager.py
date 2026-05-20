@@ -20,7 +20,7 @@ class BLEManager:
     async def scan(self):
         self.logger.info("Scanning for Petkit BLE devices...")
         devices = await BleakScanner.discover()
-        self.available_devices = {dev.address: dev for dev in devices if "W4" in dev.name or "W5" in dev.name or "CTW2" in dev.name}
+        self.available_devices = {dev.address: dev for dev in devices if dev.name and any(supported_device in dev.name for supported_device in Constants.SUPPORTED_DEVICES)}
         for address, device in self.available_devices.items():
             self.logger.info(f"Found device: {device.name} ({address})")
             self.connectiondata[address] = device
@@ -31,7 +31,7 @@ class BLEManager:
             self.logger.info(f"Connecting to {address}...")
             client = BleakClient(address, timeout = 65.0)
             await client.connect()
-            
+
             self.connected_devices[address] = client
             self.logger.info(f"Connected to {address}")
             await self.start_notifications(address, Constants.READ_UUID)
@@ -44,10 +44,10 @@ class BLEManager:
         if address in self.connected_devices:
             self.logger.info(f"Disconnecting from {address}...")
             client = self.connected_devices[address]
-            
+
             if client.is_connected:
                 await client.stop_notify(Constants.READ_UUID)
-            
+
             await client.disconnect()
             del self.connected_devices[address]
             self.logger.info(f"Disconnected from {address}")
@@ -69,11 +69,30 @@ class BLEManager:
 
     async def write_characteristic(self, address, characteristic_uuid, data):
         if address in self.connected_devices:
-            self.logger.info(f"Writing to characteristic {characteristic_uuid} on {address}")
             client = self.connected_devices[address]
-            await client.write_gatt_char(characteristic_uuid, data)
-            self.logger.info(f"Write complete")
-            return True
+
+            try:
+                self.logger.info(f"Writing to characteristic {characteristic_uuid} on {address}")
+
+                await asyncio.wait_for(
+                    client.write_gatt_char(characteristic_uuid, data),
+                    timeout=5.0
+                )
+
+                self.logger.info("Write complete")
+                return True
+
+            except asyncio.TimeoutError:
+                self.logger.error(f"Write timeout on {address}, reconnecting...")
+                await self.disconnect_device(address)
+                await asyncio.sleep(1)
+                await self.connect_device(address)
+                return False
+
+            except Exception as e:
+                self.logger.error(f"Write failed: {e}")
+                return False
+
         else:
             self.logger.error(f"Device {address} not connected")
             return False
@@ -109,10 +128,10 @@ class BLEManager:
                 try:
                     await self.commands.get_battery() # To update voltage
                     await self.commands.get_device_update()
-                    
-                    if self.queue.qsize() > 10: 
+
+                    if self.queue.qsize() > 10:
                         raise Exception("Queue size over threshold. Disconnecting...")
-                    
+
                     await asyncio.sleep(interval)
                 except Exception as e:
                     self.logger.error(f"Error during heartbeat: {e}")

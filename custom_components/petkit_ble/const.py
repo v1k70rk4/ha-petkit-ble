@@ -12,7 +12,7 @@ DEFAULT_UPDATE_INTERVAL = 10  # seconds
 HEARTBEAT_INTERVAL = 60     # seconds
 
 # Device types
-SUPPORTED_DEVICES = ["W4", "W5", "CTW2"]
+SUPPORTED_DEVICES = ["W4", "W5", "CTW2", "CTW3"]
 
 # Entity attributes
 ATTR_BATTERY = "battery"

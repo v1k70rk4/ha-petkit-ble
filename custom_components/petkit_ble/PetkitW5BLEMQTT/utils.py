@@ -274,6 +274,8 @@ class Utils:
     # device.filter_percentage, device.smart_time_on, device.smart_time_off
     @staticmethod
     def calculate_remaining_filter_time(filter_percentage, time_on, time_off):
+        if time_on == 0:
+            return math.ceil(filter_percentage * 60)
         return math.ceil(((filter_percentage * 30.0) * (time_on + time_off)) / time_on)
     
     @staticmethod
@@ -300,7 +302,12 @@ class Utils:
             213: {"name": "Petkit_W5N", "alias": "W5N", "product_name": "Eversweet Mini", "device_type": 14, "type_code": 3},
             214: {"name": "Petkit_W4X", "alias": "W4X", "product_name": "Eversweet 3 Pro", "device_type": 14, "type_code": 4},
             217: {"name": "Petkit_CTW2", "alias": "CTW2", "product_name": "Eversweet Solo 2", "device_type": 14, "type_code": 5},
-            228: {"name": "Petkit_W4XUVC", "alias": "W4X", "product_name": "Eversweet 3 Pro (UVC)", "device_type": 14, "type_code": 6}
+            223: {"name": "Petkit_CTW3", "alias": "W5", "product_name": "Eversweet Max", "device_type": 24, "type_code": 1},
+            228: {"name": "Petkit_W4XUVC", "alias": "W4X", "product_name": "Eversweet 3 Pro (UVC)", "device_type": 14, "type_code": 6},
+            246: {"name": "Petkit_CTW3_2", "alias": "W5", "product_name": "Eversweet Max", "device_type": 24, "type_code": 1},
+            247: {"name": "Petkit_CTW3_100", "alias": "W5C", "product_name": "Eversweet Max 2", "device_type": 24, "type_code": 2},
+            248: {"name": "Petkit_CTW3UV", "alias": "W5N", "product_name": "Eversweet Max", "device_type": 24, "type_code": 3},
+            249: {"name": "Petkit_CTW3UV_100", "alias": "W4X", "product_name": "Eversweet Max 2", "device_type": 24, "type_code": 4}
         }
 
         return device_mapping[device_integer_identifier]

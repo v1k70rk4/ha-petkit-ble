@@ -52,3 +52,7 @@ class PetkitResetFilterButton(CoordinatorEntity[PetkitBLECoordinator], ButtonEnt
         """Handle the button press."""
         await self.coordinator.async_reset_filter()
         await self.coordinator.async_request_refresh()
+
+
+
+

@@ -107,9 +107,9 @@ class PetkitFilterPercentageSensor(PetkitSensorBase):
         """Return the filter percentage remaining."""
         raw_value = self.coordinator.current_data.get("status", {}).get("filter_percentage")
         if raw_value is not None:
-            # Convert from used percentage to remaining percentage
-            # If raw is 0.9 (0.9% used), return 99.1% remaining
-            return round(100 - raw_value, 1)
+            # Parser returns 0-1 range (e.g. 0.97 = 97% remaining)
+            # Convert to 0-100 percentage for display
+            return round(raw_value * 100, 1)
         return None
 
 class PetkitFilterTimeLeftSensor(PetkitSensorBase):
