@@ -27,9 +27,10 @@ A Home Assistant integration for controlling Petkit W5 series water fountains vi
 
 ## Supported Devices
 
-- **Petkit W4 Series**
-- **Petkit W5 Series** (Tested with Eversweet 2 Solo)
-- **Petkit CTW2 Series**
+- **Petkit W4 Series** (Eversweet 3 Pro, Eversweet 3 Pro UVC)
+- **Petkit W5 Series** (Eversweet Mini)
+- **Petkit CTW2 Series** (Eversweet Solo 2)
+- **Petkit CTW3 Series** (Eversweet Max, Eversweet Max 2)
 
 ## Installation
 
@@ -109,24 +110,6 @@ action: petkit_ble.reset_filter
 target:
   device_id:
     - 0000000000000000000000
-```
-
-### `petkit_ble.set_device_mode`
-Switch between operating modes.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `state` | int | 1 = on, 0 = off |
-| `mode` | int | 1 = normal, 2 = smart |
-
-```yaml
-action: petkit_ble.set_device_mode
-target:
-  device_id:
-    - 0000000000000000000000
-data:
-  state: 1
-  mode: 2
 ```
 
 ### `petkit_ble.set_device_config`
