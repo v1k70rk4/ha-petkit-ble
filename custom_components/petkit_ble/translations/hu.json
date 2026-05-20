@@ -98,6 +98,9 @@
       },
       "smart_mode": {
         "name": "Okos mód"
+      },
+      "led_switch": {
+        "name": "LED"
       }
     },
     "button": {

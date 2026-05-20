@@ -24,6 +24,7 @@ async def async_setup_entry(
     entities = [
         PetkitPowerSwitch(coordinator),
         PetkitSmartModeSwitch(coordinator),
+        PetkitLedSwitch(coordinator),
     ]
     
     async_add_entities(entities)
@@ -107,3 +108,51 @@ class PetkitSmartModeSwitch(PetkitSwitchBase):
         current_power = self.coordinator.current_data.get("status", {}).get("power_status", POWER_ON)
         await self.coordinator.async_set_device_mode(current_power, MODE_NORMAL)
         await self.coordinator.async_request_refresh()
+
+
+class PetkitLedSwitch(PetkitSwitchBase):
+    """LED switch for the water fountain."""
+
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        """Initialize the LED switch."""
+        super().__init__(coordinator)
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_led_switch"
+        self._attr_translation_key = "led_switch"
+        self._attr_icon = "mdi:led-on"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the LED is on."""
+        led_switch = self.coordinator.current_data.get("status", {}).get("led_switch")
+        return led_switch == 1 if led_switch is not None else None
+
+    async def _send_config(self, led_value: int) -> None:
+        """Send config with updated LED switch value, keeping everything else unchanged."""
+        config = self.coordinator.device.config
+        config_data = [
+            config.get("smart_time_on", 30),
+            config.get("smart_time_off", 60),
+            led_value,
+            config.get("led_brightness", 80),
+            config.get("led_on_byte1", 0),
+            config.get("led_on_byte2", 0),
+            config.get("led_off_byte1", 0),
+            config.get("led_off_byte2", 0),
+            config.get("do_not_disturb_switch", 0),
+            config.get("dnd_on_byte1", 0),
+            config.get("dnd_on_byte2", 0),
+            config.get("dnd_off_byte1", 0),
+            config.get("dnd_off_byte2", 0),
+            config.get("is_locked", 0),
+        ]
+        await self.coordinator.async_set_device_config(config_data)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the LED on."""
+        await self._send_config(1)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn the LED off."""
+        await self._send_config(0)
