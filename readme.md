@@ -97,24 +97,62 @@ The integration will create entities for:
 
 ## Services
 
-The integration provides Home Assistant services for advanced control:
+The integration provides Home Assistant services for advanced control.
+
+> **Important:** Since v0.5.0, all service calls require a **device target**. You must specify which device the action applies to.
 
 ### `petkit_ble.reset_filter`
-Reset the water filter counter.
+Reset the water filter counter. Also available as a button entity on the device card.
+
+```yaml
+action: petkit_ble.reset_filter
+target:
+  device_id:
+    - 0000000000000000000000
+```
+
+### `petkit_ble.set_device_mode`
+Switch between operating modes.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `state` | int | 1 = on, 0 = off |
+| `mode` | int | 1 = normal, 2 = smart |
+
+```yaml
+action: petkit_ble.set_device_mode
+target:
+  device_id:
+    - 0000000000000000000000
+data:
+  state: 1
+  mode: 2
+```
 
 ### `petkit_ble.set_device_config`
-Configure device settings including:
-- `smart_time_on`: Smart mode on duration (minutes)
-- `smart_time_off`: Smart mode off duration (minutes)  
-- `led_brightness`: LED brightness (0-100%)
+Configure device settings.
 
-Example service call:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `smart_time_on` | int | Smart mode on duration (minutes) |
+| `smart_time_off` | int | Smart mode off duration (minutes) |
+| `led_brightness` | int | LED brightness (0-100%) |
+| `led_switch` | bool | LED on/off |
+| `do_not_disturb` | bool | Do Not Disturb on/off |
+| `is_locked` | bool | Child lock on/off |
+
 ```yaml
-service: petkit_ble.set_device_config
+action: petkit_ble.set_device_config
+target:
+  device_id:
+    - 0000000000000000000000
 data:
   smart_time_on: 30
-  smart_time_off: 90
-  led_brightness: 50
+  smart_time_off: 60
+  led_brightness: 80
+  led_switch: true
+  do_not_disturb: true
+  is_locked: true
 ```
 
 ## Automation Examples
