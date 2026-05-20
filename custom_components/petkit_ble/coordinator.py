@@ -3,23 +3,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
 from typing import Any
 
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth.active_update_processor import ActiveBluetoothProcessorCoordinator
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .const import DOMAIN, DEFAULT_SCAN_INTERVAL, CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+from .const import DOMAIN, CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
 from .ha_bluetooth_adapter import HABluetoothAdapter
 
-# Import the Petkit library modules (included in the integration)
 import sys
 import os
-
-# Add current directory to path so we can import PetkitW5BLEMQTT
 sys.path.insert(0, os.path.dirname(__file__))
 
 from PetkitW5BLEMQTT.device import Device
@@ -29,105 +25,57 @@ from PetkitW5BLEMQTT.constants import Constants
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class PetkitBLEData:
     """Data class for Petkit BLE device."""
-    
+
     def __init__(self, device: Device) -> None:
-        """Initialize the data."""
         self.device = device
-        
+
     def update(self, service_info: bluetooth.BluetoothServiceInfoBleak) -> None:
-        """Update device data from bluetooth service info."""
-        # Update RSSI from advertisement
+        """Update RSSI from bluetooth advertisement."""
         if hasattr(self.device, '_rssi'):
             self.device.status = {"rssi": service_info.rssi}
 
+
 class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
-    """Petkit BLE data update coordinator using HA's Bluetooth integration."""
+    """Petkit BLE data update coordinator."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the coordinator."""
         self.entry = entry
         self.address = entry.data[CONF_ADDRESS]
         self.update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        
-        # Initialize Petkit BLE components with HA Bluetooth adapter
+
+        # Core BLE components
         self.device = Device(self.address)
         self.commands = Commands(ble_manager=None, device=self.device, logger=_LOGGER)
         self.event_handlers = EventHandlers(
-            device=self.device, 
-            commands=self.commands, 
-            logger=_LOGGER
+            device=self.device, commands=self.commands, logger=_LOGGER
         )
-        
-        # Use HA Bluetooth adapter instead of direct BLE manager
         self.ble_manager = HABluetoothAdapter(
-            hass=hass,
-            address=self.address,
-            event_handler=self.event_handlers,
-            logger=_LOGGER
+            hass=hass, address=self.address,
+            event_handler=self.event_handlers, logger=_LOGGER,
         )
-        
-        # Complete the circular references
+
+        # Wire up circular refs
         self.commands.ble_manager = self.ble_manager
-        # Fix missing mac attribute in Commands class
         self.commands.mac = self.address
-        
-        # Set BLE manager reference in device for connection status access
         self.device.set_ble_manager(self.ble_manager)
-        
-        # Initialize data processor
+
         self.data = PetkitBLEData(self.device)
-        
-        # Define poll method for this instance
+
+        # ── Poll callbacks (required by ActiveBluetoothProcessorCoordinator) ──
+        # We do our own polling in _start_regular_polling, so _async_poll
+        # just returns existing data without issuing BLE commands.
         async def _async_poll(service_info: bluetooth.BluetoothServiceInfoBleak) -> PetkitBLEData:
-            """Poll the device for updated data."""
-            try:
-                # Only poll if device is already initialized (prevent duplicate initialization)
-                if not self._initialized:
-                    _LOGGER.debug("Device not yet initialized, skipping poll")
-                    return self.data
-                
-                # Check if device is still connected before polling
-                if not self.ble_manager.connected_devices.get(self.address):
-                    _LOGGER.debug("Device not connected during poll, skipping")
-                    return self.data
-                    
-                # Get fresh device data using existing commands with timing
-                _LOGGER.debug("Polling device for data updates")
-                
-                await self.commands.get_battery()
-                await asyncio.sleep(0.4)  # Allow time for response
-                
-                await self.commands.get_device_state()
-                await asyncio.sleep(0.4)
-                
-                await self.commands.get_device_update() 
-                await asyncio.sleep(0.6)  # Longer wait for final response
-                
-                # Update data object
-                self.data.update(service_info)
-                
-                # Notify listeners of the update
-                self.async_update_listeners()
-                
-                _LOGGER.debug("Device poll completed")
-                return self.data
-                
-            except Exception as err:
-                _LOGGER.debug(f"Error polling device: {err}")
-                # Don't raise UpdateFailed - just return existing data
-                # This prevents the coordinator from failing completely
-                return self.data
+            self.data.update(service_info)
+            return self.data
 
         def _needs_poll(service_info: bluetooth.BluetoothServiceInfoBleak, last_poll: float | None) -> bool:
-            """Check if we need to poll the device."""
-            # Always poll for active data updates
-            return True
-        
+            return False  # We poll on our own schedule
+
         super().__init__(
-            hass,
-            _LOGGER,
+            hass, _LOGGER,
             address=self.address,
             mode=bluetooth.BluetoothScanningMode.ACTIVE,
             update_method=self.data.update,
@@ -135,370 +83,226 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             poll_method=_async_poll,
             connectable=True,
         )
-        
-        self._consumer_task = None
+
+        self._consumer_task: asyncio.Task | None = None
+        self._polling_task: asyncio.Task | None = None
         self._initialized = False
         self._listeners: set = set()
-        self._initialization_task = None
-        
-        # Listen for options updates
-        self.entry.add_update_listener(self.async_options_updated)
+        self._initialization_task: asyncio.Task | None = None
+
+        entry.add_update_listener(self._on_options_updated)
+
+    # ── Lifecycle ──────────────────────────────────────────────────
 
     async def async_start(self) -> None:
-        """Start the coordinator and immediately initialize connection."""
-        # Start the base coordinator first (not async in ActiveBluetoothProcessorCoordinator)
+        """Start the coordinator and kick off initialization."""
         super().async_start()
-        
-        # Immediately attempt device initialization regardless of BT discovery
         if not self._initialized:
             self._initialization_task = asyncio.create_task(self._initialization_loop())
-        
+
+    async def async_shutdown(self) -> None:
+        """Shutdown and release resources."""
+        await self._cleanup()
+
+    # ── Initialization ─────────────────────────────────────────────
+
     async def _initialization_loop(self) -> None:
-        """Continuously attempt device initialization until successful."""
-        retry_count = 0
-        # No max retries - keep trying indefinitely
-        
+        """Retry initialization until successful."""
+        attempt = 0
         while not self._initialized:
             try:
-                _LOGGER.info(f"Initialization attempt {retry_count + 1}")
+                attempt += 1
+                _LOGGER.info(f"Initialization attempt {attempt}")
                 await self._initialize_device()
                 if self._initialized:
-                    _LOGGER.info("Device initialization successful")
-                    break
+                    _LOGGER.info("✅ Device initialization successful")
+                    return
             except Exception as err:
-                _LOGGER.warning(f"Initialization attempt {retry_count + 1} failed: {err}")
-                
-            retry_count += 1
-            
-            # Use immediate retry with minimal delays
-            if retry_count < 5:
-                delay = 0.5  # 500ms for first 5 attempts
-            elif retry_count < 10:
-                delay = 1.0  # 1 second for next 5 attempts  
-            elif retry_count < 20:
-                delay = 2.0  # 2 seconds for next 10 attempts
-            else:
-                delay = 5.0  # 5 seconds afterwards
-            
-            _LOGGER.debug(f"Waiting {delay}s before next initialization attempt...")
-            await asyncio.sleep(delay)
+                _LOGGER.warning(f"Initialization attempt {attempt} failed: {err}")
 
-    async def _async_setup(self) -> None:
-        """Set up the coordinator during first refresh."""
-        await self._initialize_device()
+            # Progressive delay: 0.5s → 1s → 2s → 5s
+            delay = 0.5 if attempt < 5 else (1.0 if attempt < 10 else (2.0 if attempt < 20 else 5.0))
+            await asyncio.sleep(delay)
 
     async def _initialize_device(self) -> None:
         """Initialize the BLE connection and device."""
         try:
-            _LOGGER.info(f"Initializing BLE connection to device {self.address}")
-            
-            # Scan for devices first to populate connectiondata
-            _LOGGER.info("Scanning for Petkit devices...")
+            _LOGGER.info(f"Connecting to {self.address}")
+
+            # Discover device
             await self.ble_manager.scan()
-            
-            # Connect to the specific device using HA Bluetooth
-            _LOGGER.info(f"Attempting to connect to device {self.address}")
-            
-            # Enable immediate reconnection mode
-            if hasattr(self.ble_manager, '_immediate_reconnect'):
-                self.ble_manager._immediate_reconnect = True
-            
+
+            # Connect
             if not await self.ble_manager.connect_device(self.address):
-                raise UpdateFailed(f"Could not connect to device {self.address}")
-            
+                raise UpdateFailed(f"Could not connect to {self.address}")
+
             # Start message consumer
-            _LOGGER.info("Starting message consumer...")
             self._consumer_task = asyncio.create_task(
                 self.ble_manager.message_consumer(self.address, Constants.WRITE_UUID)
             )
-            
-            # Start notifications for device updates
-            _LOGGER.info("Starting BLE notifications...")
+
+            # Start notifications
             await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
-            
-            # Allow BLE stack to stabilize after connection
-            _LOGGER.debug("Waiting for BLE stack to stabilize...")
-            await asyncio.sleep(0.2)  # Reduced delay - Petkit devices disconnect quickly if idle
-            
-            # Verify client is actually ready for writes
+            await asyncio.sleep(0.2)
+
+            # Wait for client readiness
             client = self.ble_manager.connected_devices.get(self.address)
             if client and hasattr(client, 'is_connected'):
-                retry_count = 0
-                while not client.is_connected and retry_count < 5:
-                    _LOGGER.debug(f"Client not ready, waiting... (attempt {retry_count + 1}/5)")
+                for _ in range(5):
+                    if client.is_connected:
+                        break
                     await asyncio.sleep(0.2)
-                    retry_count += 1
-                    
-                if not client.is_connected:
-                    raise UpdateFailed("Client not ready after 5 attempts")
-                    
-                _LOGGER.debug("Client verified ready for communication")
-            
-            # Initialize device data and connection using existing logic
-            # Check if we have connection data before trying to initialize device data
+                else:
+                    raise UpdateFailed("Client not ready after 5 checks")
+
+            # Init device data from scan results
             if self.address in self.ble_manager.connectiondata:
-                _LOGGER.info("Using discovered connection data for device initialization")
                 self.commands.init_device_data()
             else:
-                _LOGGER.warning(f"No connection data for {self.address}, using defaults")
-                # Set basic device info manually
+                _LOGGER.warning(f"No scan data for {self.address}, using defaults")
                 self.device.name = "Petkit Water Fountain"
-                self.device.name_readable = "Petkit Water Fountain"  
+                self.device.name_readable = "Petkit Water Fountain"
                 self.device.product_name = "Petkit BLE Water Fountain"
-                self.device.device_type = 14  # Default device type for W5
+                self.device.device_type = 14
                 self.device.type_code = 14
-            
-            _LOGGER.info("Performing minimal device initialization...")
-            
-            # Instead of full init_device_connection(), do minimal required initialization
-            try:
-                # Get basic device details first
-                _LOGGER.debug("Getting device details...")
-                await self.commands.get_device_details()
-                await asyncio.sleep(1.0)
-                
-                # Initialize device if needed
-                if not hasattr(self.device, 'device_initialized') or not self.device.device_initialized:
-                    _LOGGER.debug("Initializing device...")
-                    await self.commands.init_device()
-                    await asyncio.sleep(1.5)
-                
-                # Get basic device info  
-                _LOGGER.debug("Getting device info...")
-                await self.commands.get_device_info()
-                await asyncio.sleep(0.75)
-                
-                _LOGGER.info("Minimal device initialization completed")
-                
-            except Exception as init_err:
-                _LOGGER.warning(f"Minimal initialization failed: {init_err}")
-                # Continue anyway - we'll try to get data without full initialization
-            
-            # Set basic device information directly since communication is working
+
+            # Minimal BLE handshake
+            await self.commands.get_device_details()
+            await asyncio.sleep(1.0)
+
+            if not self.device.device_initialized:
+                await self.commands.init_device()
+                await asyncio.sleep(1.5)
+
+            await self.commands.get_device_info()
+            await asyncio.sleep(0.75)
+
+            # Fill in defaults for any uninitialized fields
             if self.device.serial == "Uninitialized":
                 self.device.serial = f"PETKIT_{self.address.replace(':', '')[-6:]}"
-                
-            if not hasattr(self.device, 'name') or not self.device.name or self.device.name == "Uninitialized":
-                self.device.name = f"Water Fountain"
-                self.device.name_readable = f"Water Fountain"
-            
-            # Always ensure we have a proper product name for the device model
-            if not hasattr(self.device, 'product_name') or not self.device.product_name or self.device.product_name == "Uninitialized":
+            if self.device.name == "Uninitialized":
+                self.device.name = "Water Fountain"
+                self.device.name_readable = "Water Fountain"
+            if not self.device.product_name or self.device.product_name == "Uninitialized":
                 self.device.product_name = "Petkit BLE Water Fountain"
-                
-            # Set a default firmware version if none received yet
-            if not hasattr(self.device, 'firmware') or self.device.firmware == 0:
-                self.device.firmware = 1.0  # Default firmware version
-            
-            _LOGGER.info(f"Set device info: serial='{self.device.serial}', name='{self.device.name_readable}', firmware='{self.device.firmware}'")
-            
-            # Since we've set the device info directly, mark as initialized immediately
+            if self.device.firmware == 0:
+                self.device.firmware = 1.0
+
             self._initialized = True
-            _LOGGER.info(f"Device initialized successfully: {self.device.serial}")
-            
-            # Force an update to notify Home Assistant that device is ready
+            _LOGGER.info(f"Device ready: {self.device.name_readable} ({self.device.serial})")
+
             self.async_update_listeners()
-            _LOGGER.info("Notified Home Assistant that device is ready")
-            
-            # Start regular data polling since ActiveBluetoothProcessorCoordinator might not trigger automatically
-            _LOGGER.info("Starting regular data polling...")
-            asyncio.create_task(self._start_regular_polling())
-            
+
+            # Start the single polling loop
+            self._polling_task = asyncio.create_task(self._polling_loop())
+
         except Exception as err:
             import traceback
-            _LOGGER.error("Device initialization failed: %s", err)
-            _LOGGER.debug("Full traceback:\n%s", traceback.format_exc())
+            _LOGGER.error(f"Initialization failed: {err}")
+            _LOGGER.debug("Traceback:\n%s", traceback.format_exc())
             await self._cleanup()
-            # Don't raise here - let the system retry later
-            # This prevents the integration from failing completely on startup
 
-    async def async_shutdown(self) -> None:
-        """Shutdown the coordinator and cleanup resources."""
-        await self._cleanup()
+    # ── Polling ────────────────────────────────────────────────────
 
-    async def async_options_updated(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Handle options update."""
-        old_interval = self.update_interval
+    async def _polling_loop(self) -> None:
+        """Single polling loop that periodically refreshes device data."""
+        _LOGGER.info(f"Polling started (interval: {self.update_interval}s)")
+        while self._initialized:
+            try:
+                await asyncio.sleep(self.update_interval)
+                if not self._initialized:
+                    break
+                await self._poll_device()
+            except asyncio.CancelledError:
+                _LOGGER.info("Polling stopped")
+                break
+            except Exception as err:
+                _LOGGER.warning(f"Poll error: {err}")
+                await asyncio.sleep(5)
+
+    async def _poll_device(self) -> None:
+        """Send BLE commands to refresh device data."""
+        if not self.ble_manager.connected_devices.get(self.address):
+            _LOGGER.debug("Device not connected, requesting reconnect")
+            await self.ble_manager.ensure_connected(self.address)
+            return
+
+        _LOGGER.debug("Polling device...")
+        await self.commands.get_battery()
+        await asyncio.sleep(0.4)
+        await self.commands.get_device_state()
+        await asyncio.sleep(0.4)
+        await self.commands.get_device_update()
+        await asyncio.sleep(0.4)
+
+        self.async_update_listeners()
+        _LOGGER.debug("Poll complete")
+
+    # ── Public actions ─────────────────────────────────────────────
+
+    async def async_set_device_mode(self, state: int, mode: int) -> None:
+        await self.commands.set_device_mode(state, mode)
+
+    async def async_reset_filter(self) -> None:
+        await self.commands.set_reset_filter()
+
+    async def async_set_device_config(self, config_data: list) -> None:
+        await self.commands.set_device_config(config_data)
+
+    async def async_request_refresh(self) -> None:
+        """On-demand refresh (e.g. after a switch toggle)."""
+        if not self._initialized:
+            return
+        try:
+            await self._poll_device()
+        except Exception as err:
+            _LOGGER.warning(f"Refresh failed: {err}")
+
+    # ── Options ────────────────────────────────────────────────────
+
+    async def _on_options_updated(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        old = self.update_interval
         self.update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        
-        if old_interval != self.update_interval:
-            _LOGGER.info(f"Update interval changed from {old_interval} to {self.update_interval} seconds")
-            # No need to restart the polling task, the change will take effect on the next iteration
+        if old != self.update_interval:
+            _LOGGER.info(f"Update interval changed: {old}s → {self.update_interval}s")
+
+    # ── Cleanup ────────────────────────────────────────────────────
 
     async def _cleanup(self) -> None:
-        """Cleanup resources."""
-        # Remove options update listener
-        try:
-            self.entry.async_remove_update_listener(self.async_options_updated)
-        except (ValueError, KeyError):
-            pass  # Listener may not be registered or already removed
-        
-        if self._consumer_task:
-            self._consumer_task.cancel()
-            try:
-                await self._consumer_task
-            except asyncio.CancelledError:
-                pass
-        
-        if self._initialization_task and not self._initialization_task.done():
-            self._initialization_task.cancel()
-            # Don't await cancelled task, just let it clean up
-            try:
-                # Give it a brief moment to process the cancellation
-                await asyncio.sleep(0.1)
-            except Exception as e:
-                _LOGGER.debug(f"Error during initialization task cancellation: {e}")
-                
-        # Stop notifications and disconnect
+        """Cancel tasks and disconnect."""
+        for task in (self._consumer_task, self._polling_task, self._initialization_task):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
         if self.address in self.ble_manager.connected_devices:
             await self.ble_manager.stop_notifications(self.address, Constants.READ_UUID)
             await self.ble_manager.disconnect_device(self.address)
-            
+
         self._initialized = False
 
-    async def async_set_device_mode(self, state: int, mode: int) -> None:
-        """Set device mode (power and operation mode)."""
-        await self.commands.set_device_mode(state, mode)
-        
-    async def async_reset_filter(self) -> None:
-        """Reset the device filter."""
-        await self.commands.set_reset_filter()
-
-
-        
-    async def async_set_device_config(self, config_data: list) -> None:
-        """Set device configuration."""
-        await self.commands.set_device_config(config_data)
-    
-    async def async_request_refresh(self) -> None:
-        """Request a fresh update from the device."""
-        if not self._initialized:
-            _LOGGER.debug("Device not initialized, skipping refresh request")
-            return
-            
-        try:
-            # Check if device is still connected before attempting commands
-            if not self.ble_manager.connected_devices.get(self.address):
-                _LOGGER.warning("Device not connected during refresh request, triggering immediate reconnection")
-                # Don't wait for reconnection to complete, just trigger it
-                asyncio.create_task(self._attempt_reconnection())
-                return
-            
-            # Get fresh device data using existing commands with delays for BLE stability
-            _LOGGER.debug("Requesting device data refresh")
-            
-            await self.commands.get_battery()
-            await asyncio.sleep(0.5)  # Small delay between commands for BLE stability
-            
-            await self.commands.get_device_state() 
-            await asyncio.sleep(0.5)
-            
-            await self.commands.get_device_update()
-            await asyncio.sleep(0.3)
-            
-            # Allow time for responses to be processed
-            await asyncio.sleep(1.0)
-            
-            # Log current device data for debugging
-            _LOGGER.debug(f"Current device status: {self.device.status}")
-            _LOGGER.debug(f"Current device config: {self.device.config}")
-            _LOGGER.debug(f"Current device info: {self.device.info}")
-            
-            # Notify all listeners that data has been updated
-            self.async_update_listeners()
-            _LOGGER.debug("Device data refresh completed - listeners notified")
-            
-        except Exception as err:
-            _LOGGER.warning("Failed to refresh device data: %s", err)
-            # Don't raise the exception - just log the warning
-            # This prevents the switch operation from failing completely
-    
-    async def _attempt_reconnection(self) -> None:
-        """Attempt to reconnect to the device."""
-        try:
-            _LOGGER.info("Attempting immediate reconnection to device")
-            
-            # Enable immediate reconnection mode in adapter
-            if hasattr(self.ble_manager, '_immediate_reconnect'):
-                self.ble_manager._immediate_reconnect = True
-            
-            # Use the immediate reconnection loop
-            if hasattr(self.ble_manager, '_immediate_reconnection_loop'):
-                await self.ble_manager._immediate_reconnection_loop(self.address)
-                
-                # If reconnected, restart message consumer
-                if self.address in self.ble_manager.connected_devices:
-                    if self._consumer_task and not self._consumer_task.done():
-                        self._consumer_task.cancel()
-                    
-                    self._consumer_task = asyncio.create_task(
-                        self.ble_manager.message_consumer(self.address, Constants.WRITE_UUID)
-                    )
-                    await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
-                    _LOGGER.info("Device reconnection successful")
-                else:
-                    _LOGGER.warning("Device reconnection in progress...")
-            else:
-                # Fallback to standard reconnection
-                if await self.ble_manager.connect_device(self.address):
-                    # Restart message consumer and notifications
-                    if self._consumer_task and not self._consumer_task.done():
-                        self._consumer_task.cancel()
-                    
-                    self._consumer_task = asyncio.create_task(
-                        self.ble_manager.message_consumer(self.address, Constants.WRITE_UUID)
-                    )
-                    await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
-                    _LOGGER.info("Device reconnection successful")
-                else:
-                    _LOGGER.error("Device reconnection failed")
-        except Exception as err:
-            _LOGGER.error(f"Error during reconnection attempt: {err}")
+    # ── Listener management ────────────────────────────────────────
 
     def async_add_listener(self, update_callback, context=None) -> callable:
-        """Add a listener for data updates."""
         self._listeners.add(update_callback)
-        
-        def remove_listener():
+        def remove():
             self._listeners.discard(update_callback)
-        
-        return remove_listener
+        return remove
 
     def async_remove_listener(self, update_callback) -> None:
-        """Remove a listener."""
         self._listeners.discard(update_callback)
 
     def async_update_listeners(self) -> None:
-        """Update all listeners."""
-        for update_callback in self._listeners:
-            update_callback()
+        for cb in self._listeners:
+            cb()
 
-    async def _start_regular_polling(self) -> None:
-        """Start regular polling loop to fetch device data."""
-        poll_interval = self.update_interval
-        _LOGGER.info(f"Starting regular polling every {poll_interval} seconds")
-        
-        while self._initialized:
-            try:
-                await asyncio.sleep(poll_interval)
-                
-                if not self._initialized:
-                    break
-                    
-                _LOGGER.debug("Regular poll: requesting device data refresh")
-                await self.async_request_refresh()
-                
-            except asyncio.CancelledError:
-                _LOGGER.info("Regular polling cancelled")
-                break
-            except Exception as err:
-                _LOGGER.warning(f"Error in regular polling: {err}")
-                # Continue polling even if one cycle fails
-                await asyncio.sleep(5)  # Short delay before retry
+    # ── Data access ────────────────────────────────────────────────
 
     @property
     def current_data(self) -> dict[str, Any]:
-        """Return the current device data for entities."""
         return {
             "status": self.device.status,
             "config": self.device.config,
