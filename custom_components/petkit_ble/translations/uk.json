@@ -1,0 +1,168 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Налаштування фонтану Petkit BLE",
+        "description": "Виберіть знайдений фонтан Petkit або введіть його Bluetooth MAC-адресу вручну.",
+        "data": {
+          "address": "Пристрій"
+        }
+      },
+      "manual": {
+        "title": "Ручне налаштування пристрою",
+        "description": "Введіть MAC-адресу вашого фонтану Petkit.",
+        "data": {
+          "address": "MAC-адреса"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Підтвердження пристрою Petkit BLE",
+        "description": "Ви хочете налаштувати {name} ({address})?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Не вдалося підключитися до пристрою. Переконайтеся, що він увімкнений і знаходиться в зоні досяжності.",
+      "unknown": "Сталася неочікувана помилка."
+    },
+    "abort": {
+      "already_configured": "Цей пристрій вже налаштовано.",
+      "no_devices_found": "Не знайдено жодного пристрою Petkit BLE. Переконайтеся, що пристрій увімкнений і в режимі сполучення.",
+      "not_supported": "Цей пристрій не є підтримуваним фонтаном Petkit.",
+      "cannot_connect": "Не вдалося підключитися до пристрою."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Параметри Petkit BLE",
+        "description": "Налаштуйте параметри фонтану Petkit BLE.",
+        "data": {
+          "update_interval": "Інтервал оновлення даних (секунди)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Батарея"
+      },
+      "filter_remaining": {
+        "name": "Ресурс фільтра"
+      },
+      "filter_days_left": {
+        "name": "Залишилось днів фільтра"
+      },
+      "pump_total_runtime": {
+        "name": "Загальний час роботи насоса"
+      },
+      "pump_today_runtime": {
+        "name": "Час роботи насоса сьогодні"
+      },
+      "total_water_purified": {
+        "name": "Очищена вода загалом"
+      },
+      "water_purified_today": {
+        "name": "Очищена вода сьогодні"
+      },
+      "energy_consumption": {
+        "name": "Споживання енергії"
+      },
+      "signal_strength": {
+        "name": "Рівень сигналу"
+      },
+      "voltage": {
+        "name": "Напруга"
+      },
+      "connection": {
+        "name": "Підключення",
+        "state": {
+          "connected": "Підключено",
+          "connecting": "Підключення",
+          "disconnected": "Відключено",
+          "reconnecting": "Повторне підключення",
+          "failed": "Помилка",
+          "unknown": "Невідомо"
+        }
+      },
+      "connection_attempts": {
+        "name": "Спроби підключення"
+      },
+      "last_seen": {
+        "name": "Останнє виявлення"
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Живлення"
+      },
+      "smart_mode": {
+        "name": "Смарт-режим"
+      },
+      "led_switch": {
+        "name": "LED"
+      },
+      "do_not_disturb": {
+        "name": "Не турбувати"
+      },
+      "child_lock": {
+        "name": "Дитячий замок"
+      }
+    },
+    "button": {
+      "reset_filter": {
+        "name": "Скинути фільтр"
+      }
+    },
+    "binary_sensor": {
+      "filter_problem": {
+        "name": "Попередження фільтра"
+      },
+      "water_missing": {
+        "name": "Відсутня вода"
+      },
+      "breakdown": {
+        "name": "Апаратна несправність"
+      },
+      "running": {
+        "name": "Насос працює"
+      }
+    }
+  },
+  "services": {
+    "reset_filter": {
+      "name": "Скинути фільтр",
+      "description": "Скинути індикатор ресурсу водяного фільтра"
+    },
+    "set_device_config": {
+      "name": "Налаштування пристрою",
+      "description": "Налаштуйте параметри пристрою, такі як яскравість LED та час смарт-режиму",
+      "fields": {
+        "smart_time_on": {
+          "name": "Час роботи смарт-режиму",
+          "description": "Хвилини увімкненого стану смарт-режиму"
+        },
+        "smart_time_off": {
+          "name": "Час сну смарт-режиму",
+          "description": "Хвилини вимкненого стану смарт-режиму"
+        },
+        "led_brightness": {
+          "name": "Яскравість LED",
+          "description": "Рівень яскравості LED (0-100)"
+        },
+        "led_switch": {
+          "name": "LED увімк./вимк.",
+          "description": "Увімкнути або вимкнути LED-індикатор"
+        },
+        "do_not_disturb": {
+          "name": "Не турбувати",
+          "description": "Увімкнути або вимкнути режим «Не турбувати»"
+        },
+        "is_locked": {
+          "name": "Дитячий замок",
+          "description": "Заблокувати або розблокувати кнопки пристрою"
+        }
+      }
+    }
+  }
+}

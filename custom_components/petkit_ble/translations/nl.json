@@ -1,0 +1,168 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Petkit BLE waterfonteintje instellen",
+        "description": "Selecteer een gevonden Petkit-fonteintje, of voer het Bluetooth MAC-adres handmatig in.",
+        "data": {
+          "address": "Apparaat"
+        }
+      },
+      "manual": {
+        "title": "Handmatige apparaatinstelling",
+        "description": "Voer het MAC-adres van uw Petkit waterfonteintje in.",
+        "data": {
+          "address": "MAC-adres"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Petkit BLE-apparaat bevestigen",
+        "description": "Wil je {name} ({address}) instellen?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met het apparaat. Zorg dat het aan staat en binnen bereik is.",
+      "unknown": "Er is een onverwachte fout opgetreden."
+    },
+    "abort": {
+      "already_configured": "Dit apparaat is al geconfigureerd.",
+      "no_devices_found": "Er zijn geen Petkit BLE-apparaten gevonden. Zorg ervoor dat uw apparaat aan staat en in de koppelingsmodus staat.",
+      "not_supported": "Dit apparaat is geen ondersteund Petkit waterfonteintje.",
+      "cannot_connect": "Kan geen verbinding maken met het apparaat."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Petkit BLE opties",
+        "description": "Configureer uw Petkit BLE waterfonteintje-instellingen.",
+        "data": {
+          "update_interval": "Data-update interval (seconden)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Batterij"
+      },
+      "filter_remaining": {
+        "name": "Filterlevensduur"
+      },
+      "filter_days_left": {
+        "name": "Resterende filterdagen"
+      },
+      "pump_total_runtime": {
+        "name": "Totale pomplooptijd"
+      },
+      "pump_today_runtime": {
+        "name": "Pomplooptijd vandaag"
+      },
+      "total_water_purified": {
+        "name": "Totaal gezuiverd water"
+      },
+      "water_purified_today": {
+        "name": "Gezuiverd water vandaag"
+      },
+      "energy_consumption": {
+        "name": "Energieverbruik"
+      },
+      "signal_strength": {
+        "name": "Signaalsterkte"
+      },
+      "voltage": {
+        "name": "Spanning"
+      },
+      "connection": {
+        "name": "Verbinding",
+        "state": {
+          "connected": "Verbonden",
+          "connecting": "Verbinden",
+          "disconnected": "Niet verbonden",
+          "reconnecting": "Opnieuw verbinden",
+          "failed": "Mislukt",
+          "unknown": "Onbekend"
+        }
+      },
+      "connection_attempts": {
+        "name": "Verbindingspogingen"
+      },
+      "last_seen": {
+        "name": "Laatst gezien"
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Aan/Uit"
+      },
+      "smart_mode": {
+        "name": "Smart-modus"
+      },
+      "led_switch": {
+        "name": "LED"
+      },
+      "do_not_disturb": {
+        "name": "Niet storen"
+      },
+      "child_lock": {
+        "name": "Kinderslot"
+      }
+    },
+    "button": {
+      "reset_filter": {
+        "name": "Filter resetten"
+      }
+    },
+    "binary_sensor": {
+      "filter_problem": {
+        "name": "Filterwaarschuwing"
+      },
+      "water_missing": {
+        "name": "Water ontbreekt"
+      },
+      "breakdown": {
+        "name": "Hardwarestoring"
+      },
+      "running": {
+        "name": "Pomp actief"
+      }
+    }
+  },
+  "services": {
+    "reset_filter": {
+      "name": "Filter resetten",
+      "description": "Reset de levensduurindicator van het waterfilter"
+    },
+    "set_device_config": {
+      "name": "Apparaatconfiguratie instellen",
+      "description": "Configureer apparaatinstellingen zoals LED-helderheid en smart-modus timing",
+      "fields": {
+        "smart_time_on": {
+          "name": "Smart-modus werktijd",
+          "description": "Minuten dat de smart-modus actief is"
+        },
+        "smart_time_off": {
+          "name": "Smart-modus slaaptijd",
+          "description": "Minuten dat de smart-modus slaapt"
+        },
+        "led_brightness": {
+          "name": "LED-helderheid",
+          "description": "LED-helderheidsniveau (0-100)"
+        },
+        "led_switch": {
+          "name": "LED aan/uit",
+          "description": "Schakel de LED-indicator in of uit"
+        },
+        "do_not_disturb": {
+          "name": "Niet storen",
+          "description": "Schakel de Niet storen-modus in of uit"
+        },
+        "is_locked": {
+          "name": "Kinderslot",
+          "description": "Vergrendel of ontgrendel de apparaatknoppen"
+        }
+      }
+    }
+  }
+}

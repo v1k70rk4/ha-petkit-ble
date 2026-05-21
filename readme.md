@@ -95,6 +95,8 @@ The integration will create entities for:
 - Power on/off
 - Smart mode toggle
 - LED control
+- Do Not Disturb mode
+- Child lock
 
 ## Services
 
@@ -194,6 +196,8 @@ logger:
 The integration supports multiple languages. Currently available:
 - **English** (default)
 - **Magyar / Hungarian**
+- **Nederlands / Dutch** *(based on translations from [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit))*
+- **Українська / Ukrainian** *(based on translations from [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit))*
 
 Home Assistant automatically selects the language based on your user profile settings.
 

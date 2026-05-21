@@ -25,6 +25,8 @@ async def async_setup_entry(
         PetkitPowerSwitch(coordinator),
         PetkitSmartModeSwitch(coordinator),
         PetkitLedSwitch(coordinator),
+        PetkitDndSwitch(coordinator),
+        PetkitChildLockSwitch(coordinator),
     ]
 
     async_add_entities(entities)
@@ -114,11 +116,35 @@ class PetkitSmartModeSwitch(PetkitSwitchBase):
         self.async_write_ha_state()
 
 
-class PetkitLedSwitch(PetkitSwitchBase):
+class PetkitConfigSwitch(PetkitSwitchBase):
+    """Base class for switches that modify device config via CMD 221."""
+
+    async def _send_config(self, **overrides) -> None:
+        """Send full config with overrides, keeping everything else unchanged."""
+        config = self.coordinator.device.config
+        config_data = [
+            overrides.get("smart_time_on", config.get("smart_time_on", 30)),
+            overrides.get("smart_time_off", config.get("smart_time_off", 60)),
+            overrides.get("led_switch", config.get("led_switch", 1)),
+            overrides.get("led_brightness", config.get("led_brightness", 80)),
+            config.get("led_on_byte1", 0),
+            config.get("led_on_byte2", 0),
+            config.get("led_off_byte1", 0),
+            config.get("led_off_byte2", 0),
+            overrides.get("do_not_disturb_switch", config.get("do_not_disturb_switch", 0)),
+            config.get("dnd_on_byte1", 0),
+            config.get("dnd_on_byte2", 0),
+            config.get("dnd_off_byte1", 0),
+            config.get("dnd_off_byte2", 0),
+            overrides.get("is_locked", config.get("is_locked", 0)),
+        ]
+        await self.coordinator.async_set_device_config(config_data)
+
+
+class PetkitLedSwitch(PetkitConfigSwitch):
     """LED switch for the water fountain."""
 
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
-        """Initialize the LED switch."""
         super().__init__(coordinator)
         device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
         self._attr_unique_id = f"{device_id}_led_switch"
@@ -127,37 +153,67 @@ class PetkitLedSwitch(PetkitSwitchBase):
 
     @property
     def is_on(self) -> bool | None:
-        """Return true if the LED is on."""
         led_switch = self.coordinator.current_data.get("status", {}).get("led_switch")
         return led_switch == 1 if led_switch is not None else None
 
-    async def _send_config(self, led_value: int) -> None:
-        """Send config with updated LED switch value, keeping everything else unchanged."""
-        config = self.coordinator.device.config
-        config_data = [
-            config.get("smart_time_on", 30),
-            config.get("smart_time_off", 60),
-            led_value,
-            config.get("led_brightness", 80),
-            config.get("led_on_byte1", 0),
-            config.get("led_on_byte2", 0),
-            config.get("led_off_byte1", 0),
-            config.get("led_off_byte2", 0),
-            config.get("do_not_disturb_switch", 0),
-            config.get("dnd_on_byte1", 0),
-            config.get("dnd_on_byte2", 0),
-            config.get("dnd_off_byte1", 0),
-            config.get("dnd_off_byte2", 0),
-            config.get("is_locked", 0),
-        ]
-        await self.coordinator.async_set_device_config(config_data)
-        self.coordinator.device._led_switch = led_value
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._send_config(led_switch=1)
+        self.coordinator.device._led_switch = 1
         self.async_write_ha_state()
 
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._send_config(led_switch=0)
+        self.coordinator.device._led_switch = 0
+        self.async_write_ha_state()
+
+
+class PetkitDndSwitch(PetkitConfigSwitch):
+    """Do Not Disturb switch for the water fountain."""
+
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        super().__init__(coordinator)
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_dnd_switch"
+        self._attr_translation_key = "do_not_disturb"
+        self._attr_icon = "mdi:moon-waning-crescent"
+
+    @property
+    def is_on(self) -> bool | None:
+        dnd = self.coordinator.current_data.get("status", {}).get("do_not_disturb_switch")
+        return dnd == 1 if dnd is not None else None
+
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the LED on."""
-        await self._send_config(1)
+        await self._send_config(do_not_disturb_switch=1)
+        self.coordinator.device._do_not_disturb_switch = 1
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the LED off."""
-        await self._send_config(0)
+        await self._send_config(do_not_disturb_switch=0)
+        self.coordinator.device._do_not_disturb_switch = 0
+        self.async_write_ha_state()
+
+
+class PetkitChildLockSwitch(PetkitConfigSwitch):
+    """Child lock switch for the water fountain."""
+
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        super().__init__(coordinator)
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_child_lock"
+        self._attr_translation_key = "child_lock"
+        self._attr_icon = "mdi:lock"
+
+    @property
+    def is_on(self) -> bool | None:
+        locked = self.coordinator.current_data.get("status", {}).get("is_locked")
+        return locked == 1 if locked is not None else None
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._send_config(is_locked=1)
+        self.coordinator.device._is_locked = 1
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._send_config(is_locked=0)
+        self.coordinator.device._is_locked = 0
+        self.async_write_ha_state()

@@ -101,6 +101,12 @@
       },
       "led_switch": {
         "name": "LED"
+      },
+      "do_not_disturb": {
+        "name": "Do Not Disturb"
+      },
+      "child_lock": {
+        "name": "Child Lock"
       }
     },
     "button": {
