@@ -300,13 +300,23 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
     async def _cleanup(self) -> None:
         """Cancel tasks and disconnect."""
-        for task in (self._consumer_task, self._polling_task, self._initialization_task):
+        current_task = asyncio.current_task()
+        tasks = (
+            ("_consumer_task", self._consumer_task),
+            ("_polling_task", self._polling_task),
+            ("_initialization_task", self._initialization_task),
+        )
+        for attr, task in tasks:
+            if task is current_task:
+                continue
             if task and not task.done():
                 task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError:
                     pass
+            if task is not current_task:
+                setattr(self, attr, None)
 
         if self.address in self.ble_manager.connected_devices:
             await self.ble_manager.stop_notifications(self.address, Constants.READ_UUID)

@@ -1,6 +1,12 @@
 from .utils import Utils
 
 class Parsers:
+    @staticmethod
+    def _device_alias(device_context):
+        if isinstance(device_context, dict):
+            return device_context.get("alias") or "Uninitialized"
+        return device_context
+
     # Get Battery Synchronization
     @staticmethod
     def device_battery(data, alias):
@@ -32,6 +38,8 @@ class Parsers:
     # Get device state
     @staticmethod
     def device_state(data, alias):
+        if len(data) < 12:
+            return {"error": "Insufficient data length for device state"}
         return {
             "power_status": data[0],
             "mode": data[1],
@@ -47,6 +55,8 @@ class Parsers:
     # Get device configuration
     @staticmethod
     def device_configuration(data, alias):
+        if len(data) < 14:
+            return {"error": "Insufficient data length for device configuration"}
         led_light_time_on = Utils.bytes_to_short(data[4:6])
         led_light_time_off = Utils.bytes_to_short(data[6:8])
         do_not_disturb_time_on = Utils.bytes_to_short(data[9:11])
@@ -92,11 +102,13 @@ class Parsers:
     # Status
     @staticmethod
     def device_status(data, alias):
+        if len(data) < 29:
+            return {"error": "Insufficient data length for device status"}
         mode = data[1]
         filter_percentage = Utils.byte_to_integer(data[10]) / 100
         smart_time_on = data[16]
         smart_time_off = data[17]
-        alias = alias
+        alias = Parsers._device_alias(alias)
         pump_runtime_today = Utils.bytes_to_integer(data[12:16])
         pump_runtime = Utils.bytes_to_integer(data[6:10])
         

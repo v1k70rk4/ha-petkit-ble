@@ -303,7 +303,16 @@ class Utils:
             228: {"name": "Petkit_W4XUVC", "alias": "W4X", "product_name": "Eversweet 3 Pro (UVC)", "device_type": 14, "type_code": 6}
         }
 
-        return device_mapping[device_integer_identifier]
+        return device_mapping.get(
+            device_integer_identifier,
+            {
+                "name": f"Petkit_Unknown_{device_integer_identifier}",
+                "alias": "Unknown",
+                "product_name": "Petkit BLE Water Fountain",
+                "device_type": 0,
+                "type_code": 0,
+            },
+        )
         
     @staticmethod
     def decimal_to_time(decimal_time):

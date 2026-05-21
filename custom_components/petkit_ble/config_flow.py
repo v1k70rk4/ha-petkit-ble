@@ -41,6 +41,9 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             address = user_input[CONF_ADDRESS]
+            if address == "manual":
+                return await self.async_step_manual()
+
             await self.async_set_unique_id(format_mac(address))
             self._abort_if_unique_id_configured()
 
@@ -70,9 +73,6 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             for address, service_info in discovered_devices.items()
         }
         device_options["manual"] = "Enter MAC address manually"
-
-        if user_input is not None and user_input[CONF_ADDRESS] == "manual":
-            return await self.async_step_manual()
 
         return self.async_show_form(
             step_id="user",

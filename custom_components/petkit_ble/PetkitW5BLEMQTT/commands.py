@@ -26,9 +26,10 @@ class Commands:
         self.logger.debug(f"Received ServiceData {discovered_bytes}")
         
         device_properties = Utils.get_device_properties(device_integer_identifier)
-        
+
         self.device.name = device_properties['name']
         self.device.name_readable = device_properties['name'].replace("_", " ") # Replace _ with space
+        self.device.alias = device_properties['alias']
         self.device.product_name = device_properties['product_name']
         self.device.device_type = device_properties['device_type']
         self.device.type_code = device_properties['type_code']

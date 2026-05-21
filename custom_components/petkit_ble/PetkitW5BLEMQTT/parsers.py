@@ -1,6 +1,19 @@
 from .utils import Utils
 
 class Parsers:
+    @staticmethod
+    def _device_alias(device_context):
+        if isinstance(device_context, dict):
+            return device_context.get("alias") or "Uninitialized"
+        return device_context
+
+    @staticmethod
+    def _is_ctw3(device_context):
+        if isinstance(device_context, dict):
+            name = device_context.get("name") or ""
+            return device_context.get("device_type") == 24 or "CTW3" in name
+        return device_context == "CTW3"
+
     # Get Battery Synchronization
     @staticmethod
     def device_battery(data, alias):
@@ -30,7 +43,7 @@ class Parsers:
     # Get device state
     @staticmethod
     def device_state(data, alias):
-        if alias == "CTW3":
+        if Parsers._is_ctw3(alias):
             if len(data) < 26:
                 return {"error": "Insufficient data length for CTW3"}
             return {
@@ -54,6 +67,8 @@ class Parsers:
                 "module_status": data[25],
             }
         else:
+            if len(data) < 12:
+                return {"error": "Insufficient data length for device state"}
             return {
                 "power_status": data[0],
                 "mode": data[1],
@@ -69,7 +84,9 @@ class Parsers:
     # Get device configuration
     @staticmethod
     def device_configuration(data, alias):
-        if alias == "CTW3":
+        if Parsers._is_ctw3(alias):
+            if len(data) < 9:
+                return {"error": "Insufficient data length for CTW3 configuration"}
             battery_working_time = Utils.bytes_to_short(data[2:4])
             battery_sleep_time = Utils.bytes_to_short(data[4:6])
 
@@ -90,6 +107,8 @@ class Parsers:
                 "is_locked": is_locked,
             }
         else:
+            if len(data) < 13:
+                return {"error": "Insufficient data length for device configuration"}
             led_light_time_on = Utils.bytes_to_short(data[4:6])
             led_light_time_off = Utils.bytes_to_short(data[6:8])
             do_not_disturb_time_on = Utils.bytes_to_short(data[9:11])
@@ -135,7 +154,10 @@ class Parsers:
     # Status
     @staticmethod
     def device_status(data, alias):
-        if alias == "CTW3":
+        device_alias = Parsers._device_alias(alias)
+        if Parsers._is_ctw3(alias):
+            if len(data) < 26:
+                return {"error": "Insufficient data length for CTW3 status"}
             mode = data[2]
             filter_percentage = data[13] / 100.0
             pump_runtime = Utils.bytes_to_integer(data[9:13])
@@ -148,7 +170,7 @@ class Parsers:
             dnd_switch = data[34] if len(data) > 34 else None
 
             filter_time_left, purified_water, purified_water_today, energy_consumed = Utils.calculate_values(
-                mode, filter_percentage, smart_time_on, smart_time_off, alias, pump_runtime_today, pump_runtime
+                mode, filter_percentage, smart_time_on, smart_time_off, device_alias, pump_runtime_today, pump_runtime
             )
 
             return {
@@ -183,15 +205,16 @@ class Parsers:
                 "energy_consumed": energy_consumed,
             }
 
+        if len(data) < 29:
+            return {"error": "Insufficient data length for device status"}
         mode = data[1]
         filter_percentage = Utils.byte_to_integer(data[10]) / 100
         smart_time_on = data[16]
         smart_time_off = data[17]
-        alias = alias
         pump_runtime_today = Utils.bytes_to_integer(data[12:16])
         pump_runtime = Utils.bytes_to_integer(data[6:10])
 
-        filter_time_left, purified_water, purified_water_today, energy_consumed = Utils.calculate_values(mode, filter_percentage, smart_time_on, smart_time_off, alias, pump_runtime_today, pump_runtime)
+        filter_time_left, purified_water, purified_water_today, energy_consumed = Utils.calculate_values(mode, filter_percentage, smart_time_on, smart_time_off, device_alias, pump_runtime_today, pump_runtime)
 
         led_light_time_on = Utils.bytes_to_short(data[20:22])
         led_light_time_off = Utils.bytes_to_short(data[22:24])

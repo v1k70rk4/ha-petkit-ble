@@ -18,8 +18,15 @@ class EventHandlers:
             213: Parsers.device_identifiers,
             230: Parsers.device_status,
         }
-        
+
         # Previously: Messages were forwarded to MQTT for Home Assistant integration
+
+    def _parser_context(self):
+        return {
+            "alias": self.device.alias,
+            "device_type": self.device.device_type,
+            "name": self.device.name,
+        }
 
     async def handle_notification(self, sender, message):
         parsed_data = Utils.parse_bytearray(message)
@@ -32,9 +39,13 @@ class EventHandlers:
         
         if cmd in self.handlers:
             handler = self.handlers[cmd]
-            data = handler(parsed_data['data'], self.device.alias)
+            data = handler(parsed_data['data'], self._parser_context())
             self.logger.debug(f"Parsed data\n{data}")
-            
+
+            if isinstance(data, dict) and "error" in data:
+                self.logger.warning(f"Skipping command {cmd}: {data['error']}")
+                return parsed_data
+
             # Update config
             if cmd in [86, 200, 213]:
                 self.device.info = data
