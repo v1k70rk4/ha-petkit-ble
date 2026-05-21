@@ -90,6 +90,9 @@
       },
       "last_seen": {
         "name": "Laatst gezien"
+      },
+      "firmware": {
+        "name": "Firmware"
       }
     },
     "switch": {
@@ -126,6 +129,52 @@
       },
       "running": {
         "name": "Pomp actief"
+      },
+      "pet_detected": {
+        "name": "Huisdier drinkt"
+      },
+      "on_ac_power": {
+        "name": "Netstroom"
+      },
+      "low_battery": {
+        "name": "Batterij bijna leeg"
+      },
+      "suspended": {
+        "name": "Pomp gepauzeerd"
+      }
+    },
+    "number": {
+      "led_brightness": {
+        "name": "LED-helderheid"
+      },
+      "smart_work_minutes": {
+        "name": "Smart-modus werktijd"
+      },
+      "smart_sleep_minutes": {
+        "name": "Smart-modus slaaptijd"
+      }
+    },
+    "time": {
+      "led_on_time": {
+        "name": "LED aan-tijd"
+      },
+      "led_off_time": {
+        "name": "LED uit-tijd"
+      },
+      "dnd_start_time": {
+        "name": "Niet storen starttijd"
+      },
+      "dnd_end_time": {
+        "name": "Niet storen eindtijd"
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Modus",
+        "state": {
+          "normal": "Normaal",
+          "smart": "Smart"
+        }
       }
     }
   },

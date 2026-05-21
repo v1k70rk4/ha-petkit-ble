@@ -89,6 +89,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         self._initialized = False
         self._listeners: set = set()
         self._initialization_task: asyncio.Task | None = None
+        self._poll_count: int = 0
 
         entry.add_update_listener(self._on_options_updated)
 
@@ -235,6 +236,14 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         await self.commands.get_device_update()
         await asyncio.sleep(0.4)
 
+        # Sync device clock every ~60 minutes to prevent drift
+        self._poll_count += 1
+        polls_per_hour = max(1, 3600 // self.update_interval)
+        if self._poll_count % polls_per_hour == 0:
+            _LOGGER.debug("Periodic time sync")
+            await self.commands.set_datetime()
+            await asyncio.sleep(0.2)
+
         self.async_update_listeners()
         _LOGGER.debug("Poll complete")
 
@@ -248,6 +257,27 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
     async def async_set_device_config(self, config_data: list) -> None:
         await self.commands.set_device_config(config_data)
+
+    async def async_update_config(self, **overrides) -> None:
+        """Update device config with overrides, keeping everything else unchanged."""
+        config = self.device.config
+        config_data = [
+            overrides.get("smart_time_on", config.get("smart_time_on", 30)),
+            overrides.get("smart_time_off", config.get("smart_time_off", 60)),
+            overrides.get("led_switch", config.get("led_switch", 1)),
+            overrides.get("led_brightness", config.get("led_brightness", 80)),
+            overrides.get("led_on_byte1", config.get("led_on_byte1", 0)),
+            overrides.get("led_on_byte2", config.get("led_on_byte2", 0)),
+            overrides.get("led_off_byte1", config.get("led_off_byte1", 0)),
+            overrides.get("led_off_byte2", config.get("led_off_byte2", 0)),
+            overrides.get("do_not_disturb_switch", config.get("do_not_disturb_switch", 0)),
+            overrides.get("dnd_on_byte1", config.get("dnd_on_byte1", 0)),
+            overrides.get("dnd_on_byte2", config.get("dnd_on_byte2", 0)),
+            overrides.get("dnd_off_byte1", config.get("dnd_off_byte1", 0)),
+            overrides.get("dnd_off_byte2", config.get("dnd_off_byte2", 0)),
+            overrides.get("is_locked", config.get("is_locked", 0)),
+        ]
+        await self.async_set_device_config(config_data)
 
     async def async_request_refresh(self) -> None:
         """On-demand refresh (e.g. after a switch toggle)."""

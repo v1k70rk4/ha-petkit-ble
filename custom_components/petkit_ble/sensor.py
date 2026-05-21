@@ -39,6 +39,7 @@ async def async_setup_entry(
         PetkitConnectionStatusSensor(coordinator),
         PetkitConnectionAttemptsSensor(coordinator),
         PetkitLastSeenSensor(coordinator),
+        PetkitFirmwareSensor(coordinator),
     ]
     
     async_add_entities(entities)
@@ -366,3 +367,22 @@ class PetkitLastSeenSensor(PetkitSensorBase):
                 # Legacy numeric timestamp format
                 return datetime.fromtimestamp(last_seen)
         return None
+
+
+class PetkitFirmwareSensor(PetkitSensorBase):
+    """Firmware version sensor."""
+
+    _attr_icon = "mdi:chip"
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        """Initialize the firmware sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._get_device_id()}_firmware"
+        self._attr_translation_key = "firmware"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the firmware version."""
+        fw = self.coordinator.current_data.get("firmware")
+        return str(fw) if fw else None

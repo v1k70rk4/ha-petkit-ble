@@ -45,3 +45,35 @@ MODE_SMART = 2
 # Power states
 POWER_OFF = 0
 POWER_ON = 1
+
+# Device capabilities
+CAP_UVC = "uvc"
+CAP_PET_DETECTION = "pet_detection"
+CAP_BATTERY_TIMING = "battery_timing"
+CAP_LED_SCHEDULE = "led_schedule"
+CAP_DND_SCHEDULE = "dnd_schedule"
+
+
+def get_device_capabilities(device) -> set[str]:
+    """Determine device capabilities from device name and type."""
+    name = getattr(device, "name", "") or ""
+    device_type = getattr(device, "device_type", 0)
+
+    # Base capabilities (all devices)
+    caps: set[str] = set()
+
+    # CTW3 series (device_type 24) has extra sensors
+    if device_type == 24 or "CTW3" in name:
+        caps.add(CAP_PET_DETECTION)
+        caps.add(CAP_BATTERY_TIMING)
+
+    # Non-CTW3 devices have LED/DND scheduling with byte pairs
+    if device_type != 24 and "CTW3" not in name:
+        caps.add(CAP_LED_SCHEDULE)
+        caps.add(CAP_DND_SCHEDULE)
+
+    # UVC models
+    if "UVC" in name or "UV" in name:
+        caps.add(CAP_UVC)
+
+    return caps

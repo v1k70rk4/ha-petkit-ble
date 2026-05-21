@@ -121,24 +121,7 @@ class PetkitConfigSwitch(PetkitSwitchBase):
 
     async def _send_config(self, **overrides) -> None:
         """Send full config with overrides, keeping everything else unchanged."""
-        config = self.coordinator.device.config
-        config_data = [
-            overrides.get("smart_time_on", config.get("smart_time_on", 30)),
-            overrides.get("smart_time_off", config.get("smart_time_off", 60)),
-            overrides.get("led_switch", config.get("led_switch", 1)),
-            overrides.get("led_brightness", config.get("led_brightness", 80)),
-            config.get("led_on_byte1", 0),
-            config.get("led_on_byte2", 0),
-            config.get("led_off_byte1", 0),
-            config.get("led_off_byte2", 0),
-            overrides.get("do_not_disturb_switch", config.get("do_not_disturb_switch", 0)),
-            config.get("dnd_on_byte1", 0),
-            config.get("dnd_on_byte2", 0),
-            config.get("dnd_off_byte1", 0),
-            config.get("dnd_off_byte2", 0),
-            overrides.get("is_locked", config.get("is_locked", 0)),
-        ]
-        await self.coordinator.async_set_device_config(config_data)
+        await self.coordinator.async_update_config(**overrides)
 
 
 class PetkitLedSwitch(PetkitConfigSwitch):

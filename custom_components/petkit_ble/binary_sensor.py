@@ -27,8 +27,13 @@ async def async_setup_entry(
         PetkitWaterMissingSensor(coordinator),
         PetkitBreakdownSensor(coordinator),
         PetkitRunningSensor(coordinator),
+        # CTW3 sensors (disabled by default, enable for CTW3 devices)
+        PetkitPetDetectedSensor(coordinator),
+        PetkitAcPowerSensor(coordinator),
+        PetkitLowBatterySensor(coordinator),
+        PetkitSuspendedSensor(coordinator),
     ]
-    
+
     async_add_entities(entities)
 
 class PetkitBinarySensorBase(CoordinatorEntity[PetkitBLECoordinator], BinarySensorEntity):
@@ -128,3 +133,76 @@ class PetkitRunningSensor(PetkitBinarySensorBase):
         """Return true if the fountain is running."""
         running_status = self.coordinator.current_data.get("status", {}).get("running_status")
         return bool(running_status) if running_status is not None else None
+
+
+class PetkitPetDetectedSensor(PetkitBinarySensorBase):
+    """Pet detected binary sensor (CTW3 only)."""
+
+    _attr_entity_registry_enabled_default = False
+    _attr_icon = "mdi:cat"
+
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        super().__init__(coordinator)
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_pet_detected"
+        self._attr_translation_key = "pet_detected"
+
+    @property
+    def is_on(self) -> bool | None:
+        val = self.coordinator.current_data.get("status", {}).get("detect_status")
+        return bool(val) if val is not None else None
+
+
+class PetkitAcPowerSensor(PetkitBinarySensorBase):
+    """AC power binary sensor (CTW3 only)."""
+
+    _attr_device_class = BinarySensorDeviceClass.PLUG
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        super().__init__(coordinator)
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_ac_power"
+        self._attr_translation_key = "on_ac_power"
+
+    @property
+    def is_on(self) -> bool | None:
+        val = self.coordinator.current_data.get("status", {}).get("electric_status")
+        return bool(val) if val is not None else None
+
+
+class PetkitLowBatterySensor(PetkitBinarySensorBase):
+    """Low battery binary sensor (CTW3 only)."""
+
+    _attr_device_class = BinarySensorDeviceClass.BATTERY
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        super().__init__(coordinator)
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_low_battery"
+        self._attr_translation_key = "low_battery"
+
+    @property
+    def is_on(self) -> bool | None:
+        val = self.coordinator.current_data.get("status", {}).get("low_battery")
+        return bool(val) if val is not None else None
+
+
+class PetkitSuspendedSensor(PetkitBinarySensorBase):
+    """Pump suspended binary sensor (CTW3 only)."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_registry_enabled_default = False
+    _attr_icon = "mdi:pump-off"
+
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        super().__init__(coordinator)
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_suspended"
+        self._attr_translation_key = "suspended"
+
+    @property
+    def is_on(self) -> bool | None:
+        val = self.coordinator.current_data.get("status", {}).get("suspend_status")
+        return bool(val) if val is not None else None

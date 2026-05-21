@@ -85,11 +85,10 @@ The integration will create entities for:
 - Power status
 - Running status
 - Warning indicators (breakdown, filter, water missing)
-- DND (Do Not Disturb) state
-- Lock state
-
-#### Buttons
-- Reset filter — resets the water filter life indicator directly from the device card
+- Pet drinking detection *(CTW3 only)*
+- AC power status *(CTW3 only)*
+- Low battery warning *(CTW3 only)*
+- Pump suspended *(CTW3 only)*
 
 #### Switches
 - Power on/off
@@ -97,6 +96,21 @@ The integration will create entities for:
 - LED control
 - Do Not Disturb mode
 - Child lock
+
+#### Number Controls
+- LED brightness (0–100% slider)
+- Smart mode work time (minutes)
+- Smart mode sleep time (minutes)
+
+#### Time Controls
+- LED on/off schedule
+- DND start/end schedule
+
+#### Select
+- Mode selector (Normal / Smart)
+
+#### Buttons
+- Reset filter — resets the water filter life indicator directly from the device card
 
 ## Services
 

@@ -90,6 +90,9 @@
       },
       "last_seen": {
         "name": "Utolsó észlelés"
+      },
+      "firmware": {
+        "name": "Firmware"
       }
     },
     "switch": {
@@ -126,6 +129,52 @@
       },
       "running": {
         "name": "Üzemel"
+      },
+      "pet_detected": {
+        "name": "Kisállat iszik"
+      },
+      "on_ac_power": {
+        "name": "Hálózati táp"
+      },
+      "low_battery": {
+        "name": "Alacsony töltöttség"
+      },
+      "suspended": {
+        "name": "Szivattyú felfüggesztve"
+      }
+    },
+    "number": {
+      "led_brightness": {
+        "name": "LED fényerő"
+      },
+      "smart_work_minutes": {
+        "name": "Okos mód munkaidő"
+      },
+      "smart_sleep_minutes": {
+        "name": "Okos mód alvásidő"
+      }
+    },
+    "time": {
+      "led_on_time": {
+        "name": "LED bekapcsolási idő"
+      },
+      "led_off_time": {
+        "name": "LED kikapcsolási idő"
+      },
+      "dnd_start_time": {
+        "name": "Ne zavarj kezdete"
+      },
+      "dnd_end_time": {
+        "name": "Ne zavarj vége"
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Üzemmód",
+        "state": {
+          "normal": "Normál",
+          "smart": "Okos"
+        }
       }
     }
   },

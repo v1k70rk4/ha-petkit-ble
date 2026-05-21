@@ -90,6 +90,9 @@
       },
       "last_seen": {
         "name": "Останнє виявлення"
+      },
+      "firmware": {
+        "name": "Прошивка"
       }
     },
     "switch": {
@@ -126,6 +129,52 @@
       },
       "running": {
         "name": "Насос працює"
+      },
+      "pet_detected": {
+        "name": "Тварина п'є"
+      },
+      "on_ac_power": {
+        "name": "Мережеве живлення"
+      },
+      "low_battery": {
+        "name": "Низький заряд батареї"
+      },
+      "suspended": {
+        "name": "Насос призупинено"
+      }
+    },
+    "number": {
+      "led_brightness": {
+        "name": "Яскравість LED"
+      },
+      "smart_work_minutes": {
+        "name": "Час роботи смарт-режиму"
+      },
+      "smart_sleep_minutes": {
+        "name": "Час сну смарт-режиму"
+      }
+    },
+    "time": {
+      "led_on_time": {
+        "name": "Час увімкнення LED"
+      },
+      "led_off_time": {
+        "name": "Час вимкнення LED"
+      },
+      "dnd_start_time": {
+        "name": "Початок режиму «Не турбувати»"
+      },
+      "dnd_end_time": {
+        "name": "Кінець режиму «Не турбувати»"
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Режим",
+        "state": {
+          "normal": "Нормальний",
+          "smart": "Смарт"
+        }
       }
     }
   },

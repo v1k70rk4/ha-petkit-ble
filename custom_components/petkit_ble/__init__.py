@@ -14,7 +14,15 @@ from .coordinator import PetkitBLECoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.BINARY_SENSOR, Platform.BUTTON]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.NUMBER,
+    Platform.TIME,
+    Platform.SELECT,
+]
 
 # Service schemas
 SERVICE_RESET_FILTER = "reset_filter"
