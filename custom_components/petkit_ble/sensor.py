@@ -72,6 +72,16 @@ class PetkitSensorBase(CoordinatorEntity[PetkitBLECoordinator], SensorEntity):
             return self.coordinator.device.serial
         return self.coordinator.address.replace(":", "")
 
+    @staticmethod
+    def _round_float(value, precision: int = 2) -> float | None:
+        """Return a rounded float value for display-friendly sensors."""
+        if value is None:
+            return None
+        try:
+            return round(float(value), precision)
+        except (TypeError, ValueError):
+            return None
+
 class PetkitBatteryLevelSensor(PetkitSensorBase):
     """Battery level sensor."""
     
@@ -216,6 +226,7 @@ class PetkitPurifiedWaterSensor(PetkitSensorBase):
     
     _attr_native_unit_of_measurement = UnitOfVolume.LITERS
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
     _attr_icon = "mdi:water"
     
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
@@ -227,13 +238,16 @@ class PetkitPurifiedWaterSensor(PetkitSensorBase):
     @property
     def native_value(self) -> float | None:
         """Return the total purified water."""
-        return self.coordinator.current_data.get("status", {}).get("purified_water")
+        return self._round_float(
+            self.coordinator.current_data.get("status", {}).get("purified_water")
+        )
 
 class PetkitPurifiedWaterTodaySensor(PetkitSensorBase):
     """Purified water today sensor."""
     
     _attr_native_unit_of_measurement = UnitOfVolume.LITERS
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
     _attr_icon = "mdi:water"
     
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
@@ -245,7 +259,9 @@ class PetkitPurifiedWaterTodaySensor(PetkitSensorBase):
     @property
     def native_value(self) -> float | None:
         """Return today's purified water."""
-        return self.coordinator.current_data.get("status", {}).get("purified_water_today")
+        return self._round_float(
+            self.coordinator.current_data.get("status", {}).get("purified_water_today")
+        )
 
 class PetkitEnergyConsumedSensor(PetkitSensorBase):
     """Energy consumed sensor."""

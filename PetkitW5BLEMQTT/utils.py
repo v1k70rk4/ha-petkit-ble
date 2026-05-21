@@ -250,22 +250,13 @@ class Utils:
         
         return f / f2    
 
-    # device.alias, device.type_code, 
+    # device.alias, device.type_code,
     @staticmethod
     def calculate_water_purified(alias, pump_runtime_today):
-        f = 0
-        f2 = 2.0
-        f3 = 1.5
-    
-        if alias == "W5C":
-            f2 = 1.0
-            f3 = 1.3
-        elif alias == "W4X":
-            f2 = 1.8
-          
-        f = (f3 * pump_runtime_today) / 60.0
-        
-        return f / f2
+        # Keep this estimate stable even after the BLE alias is discovered.
+        # Device-specific multipliers caused a one-time history jump in HA.
+        water_liters = ((1.5 * pump_runtime_today) / 60.0) / 2.0
+        return round(water_liters, 2)
     
     # canculateWxFilterLeftDays
     # if device.mode = 1 (normal)
