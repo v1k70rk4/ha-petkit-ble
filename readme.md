@@ -6,6 +6,8 @@
 [![License][license-shield]](LICENSE)
 ![Maintenance][maintenance-shield]
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=v1k70rk4&repository=ha-petkit-ble&category=integration)
+
 > **100% local BLE control** for Petkit water fountains — no cloud, no app, no compromises.
 
 ---
@@ -39,6 +41,10 @@
 ## Installation
 
 ### HACS (Recommended)
+
+[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=v1k70rk4&repository=ha-petkit-ble&category=integration)
+
+Click the button above, or manually:
 
 1. Open [HACS](https://hacs.xyz/) → **Integrations**
 2. **⋮** → **Custom repositories** → paste `https://github.com/v1k70rk4/ha-petkit-ble` → category **Integration**
