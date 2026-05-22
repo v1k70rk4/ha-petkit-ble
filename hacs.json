@@ -1,4 +1,6 @@
 {
   "name": "Petkit BLE Water Fountain",
-  "homeassistant": "2025.10.0"
+  "homeassistant": "2023.8.0",
+  "render_readme": true,
+  "content_in_root": false
 }
