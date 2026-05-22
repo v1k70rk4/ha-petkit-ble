@@ -63,9 +63,9 @@ cat > "$EVENT_FILE" << EOF
   "after": "1234567890abcdef1234567890abcdef12345678",
   "repository": {
     "name": "ha-petkit-ble",
-    "full_name": "pdiegmann/ha-petkit-ble",
+    "full_name": "v1k70rk4/ha-petkit-ble",
     "owner": {
-      "name": "pdiegmann",
+      "name": "v1k70rk4",
       "email": "test@example.com"
     }
   },

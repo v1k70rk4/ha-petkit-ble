@@ -1,125 +1,145 @@
-# Petkit BLE Water Fountain - Home Assistant Integration
+# Petkit BLE Water Fountain — Home Assistant Integration
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
 [![GitHub Release][releases-shield]][releases]
 [![GitHub Activity][commits-shield]][commits]
 [![License][license-shield]](LICENSE)
+![Maintenance][maintenance-shield]
 
-![Project Maintenance][maintenance-shield]
-[![BuyMeCoffee][buymecoffeebadge]][buymecoffee]
+> **100% local BLE control** for Petkit water fountains — no cloud, no app, no compromises.
 
-A Home Assistant integration for controlling Petkit W5 series water fountains via Bluetooth Low Energy (BLE). Control your pet's water fountain locally without cloud dependencies.
+---
 
-## Features
+## Highlights
 
-- **Local Control**: No cloud connection required - all communication via BLE
-- **Multiple Entity Types**: Sensors, switches, and binary sensors for complete device monitoring
-- **Real-time Status**: Monitor battery, filter status, water levels, and more
-- **Device Control**: 
-  - Switch between Normal and Smart operating modes
-  - Control LED brightness and on/off schedules
-  - Manage Do Not Disturb functionality
-  - Reset filter and monitor its lifetime
-- **Multi-language Support**: English and Hungarian UI — easily extensible with new languages
-- **Home Assistant Services**: Advanced device configuration through HA services
-- **Energy Monitoring**: Track power consumption and runtime statistics
-- **Alerts**: Receive notifications for breakdowns, filter changes, and low water
+| | Feature | Details |
+|---|---------|---------|
+| **Local-only** | All communication stays on your LAN via Bluetooth LE — zero cloud dependency |
+| **Full dashboard** | 14 sensors, 5 switches, 3 sliders, 4 time pickers, mode selector, reset button |
+| **Multi-device** | W4, W5, CTW2 & CTW3 series with automatic capability detection |
+| **Smart scheduling** | LED on/off times, Do Not Disturb windows, smart mode work/sleep cycles |
+| **Alerts** | Breakdown, filter expiry, low water, low battery — all as binary sensors |
+| **Multi-language** | English, Hungarian, Dutch, Ukrainian — add yours in minutes |
+| **Auto time-sync** | Device clock synced every ~60 min (no RTC chip on board) |
+| **Instant reconnect** | Progressive retry (100 ms → 5 s) with automatic recovery |
+
+---
 
 ## Supported Devices
 
-- **Petkit W4 Series** (Eversweet 3 Pro, Eversweet 3 Pro UVC)
-- **Petkit W5 Series** (Eversweet Mini)
-- **Petkit CTW2 Series** (Eversweet Solo 2)
-- **Petkit CTW3 Series** (Eversweet Max, Eversweet Max 2)
+| Series | Models | Extras |
+|--------|--------|--------|
+| **W4** | Eversweet 3 Pro, Eversweet 3 Pro UVC | UVC sterilization indicator |
+| **W5** | Eversweet Mini | — |
+| **CTW2** | Eversweet Solo 2 | — |
+| **CTW3** | Eversweet Max, Eversweet Max 2 | Pet detection, AC power, low battery, pump suspend |
+
+---
 
 ## Installation
 
 ### HACS (Recommended)
 
-1. Make sure [HACS](https://hacs.xyz/) is installed in your Home Assistant instance
-2. In HACS, go to "Integrations"
-3. Click the three dots in the top right corner and select "Custom repositories"
-4. Add this repository URL: `https://github.com/pdiegmann/ha-petkit-ble`
-5. Select "Integration" as the category
-6. Click "Add"
-7. Find "Petkit BLE Water Fountain" in the integration list and install it
-8. Restart Home Assistant
+1. Open [HACS](https://hacs.xyz/) → **Integrations**
+2. **⋮** → **Custom repositories** → paste `https://github.com/v1k70rk4/ha-petkit-ble` → category **Integration**
+3. Find **Petkit BLE Water Fountain** → **Install** → restart HA
 
-### Manual Installation
+### Manual
 
-1. Copy the `custom_components/petkit_ble` directory to your Home Assistant `custom_components` directory
+1. Copy `custom_components/petkit_ble` into your HA `custom_components/` folder
 2. Restart Home Assistant
-3. Go to Configuration -> Integrations -> Add Integration
-4. Search for "Petkit BLE" and follow the setup process
+3. **Settings** → **Integrations** → **Add Integration** → search **Petkit BLE**
 
-## Configuration
+---
 
-### Prerequisites
+## What You Get
 
-- Home Assistant 2023.8.0 or later
-- Your Petkit device must be discoverable via Bluetooth
-- Home Assistant must have Bluetooth access (built-in or USB adapter)
+<details>
+<summary><strong>Sensors (14)</strong></summary>
 
-### Setup
+| Sensor | Unit | Notes |
+|--------|------|-------|
+| Battery level | % | |
+| Filter remaining | % | |
+| Filter days left | days | |
+| Pump runtime (total) | hours | |
+| Pump runtime (today) | hours | |
+| Purified water (total) | L | |
+| Purified water (today) | L | |
+| Energy consumption | kWh | |
+| Signal strength (RSSI) | dBm | disabled by default |
+| Voltage | V | disabled by default |
+| Connection status | — | connected / connecting / disconnected / … |
+| Connection attempts | — | disabled by default |
+| Last seen | timestamp | disabled by default |
+| Firmware version | — | disabled by default |
 
-1. Go to **Configuration** -> **Integrations**
-2. Click **Add Integration**
-3. Search for "**Petkit BLE Water Fountain**"
-4. The integration will automatically discover available Petkit devices
-5. Select your device from the list
-6. Click **Submit** to complete the setup
+</details>
 
-The integration will create entities for:
+<details>
+<summary><strong>Binary Sensors (8)</strong></summary>
 
-#### Sensors
-- Battery level
-- Filter percentage remaining
-- Filter time left
-- Pump runtime (total and today)
-- Purified water (total and today)
-- Energy consumption
-- RSSI (signal strength)
-- Voltage
+| Sensor | Notes |
+|--------|-------|
+| Power status | |
+| Pump running | |
+| Breakdown warning | |
+| Filter warning | |
+| Water missing | |
+| Pet drinking | CTW3 only, disabled by default |
+| AC power | CTW3 only, disabled by default |
+| Low battery | CTW3 only, disabled by default |
+| Pump suspended | CTW3 only, disabled by default |
 
-#### Binary Sensors
-- Power status
-- Running status
-- Warning indicators (breakdown, filter, water missing)
-- Pet drinking detection *(CTW3 only)*
-- AC power status *(CTW3 only)*
-- Low battery warning *(CTW3 only)*
-- Pump suspended *(CTW3 only)*
+</details>
 
-#### Switches
+<details>
+<summary><strong>Switches (5)</strong></summary>
+
 - Power on/off
-- Smart mode toggle
-- LED control
-- Do Not Disturb mode
+- Smart mode
+- LED on/off
+- Do Not Disturb
 - Child lock
 
-#### Number Controls
-- LED brightness (0–100% slider)
-- Smart mode work time (minutes)
-- Smart mode sleep time (minutes)
+</details>
 
-#### Time Controls
-- LED on/off schedule
-- DND start/end schedule
+<details>
+<summary><strong>Number Controls (3)</strong></summary>
 
-#### Select
-- Mode selector (Normal / Smart)
+| Control | Range | Mode |
+|---------|-------|------|
+| LED brightness | 0–100 % | slider |
+| Smart mode work time | 1–120 min | box |
+| Smart mode sleep time | 1–120 min | box |
 
-#### Buttons
-- Reset filter — resets the water filter life indicator directly from the device card
+</details>
+
+<details>
+<summary><strong>Time Controls (4)</strong></summary>
+
+- LED on time / LED off time
+- DND start time / DND end time
+
+*Disabled by default — enable in entity settings.*
+
+</details>
+
+<details>
+<summary><strong>Select & Buttons</strong></summary>
+
+- **Mode selector**: Normal / Smart *(disabled by default — alternative to smart mode switch)*
+- **Reset filter**: resets filter life indicator from the device card
+
+</details>
+
+---
 
 ## Services
 
-The integration provides Home Assistant services for advanced control.
-
-> **Important:** Since v0.5.0, all service calls require a **device target**. You must specify which device the action applies to.
+> Since v1.0.0 all service calls require a **device target**.
 
 ### `petkit_ble.reset_filter`
-Reset the water filter counter. Also available as a button entity on the device card.
 
 ```yaml
 action: petkit_ble.reset_filter
@@ -129,15 +149,14 @@ target:
 ```
 
 ### `petkit_ble.set_device_config`
-Configure device settings.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `smart_time_on` | int | Smart mode on duration (minutes) |
 | `smart_time_off` | int | Smart mode off duration (minutes) |
-| `led_brightness` | int | LED brightness (0-100%) |
+| `led_brightness` | int | LED brightness (0–100 %) |
 | `led_switch` | bool | LED on/off |
-| `do_not_disturb` | bool | Do Not Disturb on/off |
+| `do_not_disturb` | bool | DND on/off |
 | `is_locked` | bool | Child lock on/off |
 
 ```yaml
@@ -154,9 +173,13 @@ data:
   is_locked: true
 ```
 
+---
+
 ## Automation Examples
 
-### Low Battery Alert
+<details>
+<summary><strong>Low Battery Alert</strong></summary>
+
 ```yaml
 automation:
   - alias: "Petkit Low Battery Alert"
@@ -170,7 +193,11 @@ automation:
         message: "Water fountain battery is low ({{ states('sensor.petkit_water_fountain_battery') }}%)"
 ```
 
-### Filter Replacement Reminder
+</details>
+
+<details>
+<summary><strong>Filter Replacement Reminder</strong></summary>
+
 ```yaml
 automation:
   - alias: "Petkit Filter Replacement"
@@ -184,77 +211,64 @@ automation:
         message: "Time to replace the water fountain filter ({{ states('sensor.petkit_water_fountain_filter_percentage') }}% remaining)"
 ```
 
-## Troubleshooting
-
-### Device Not Found
-- Ensure your Petkit device is in pairing mode
-- Check that Bluetooth is enabled on your Home Assistant host
-- Move Home Assistant closer to the device during setup
-- Restart the Bluetooth service: `sudo systemctl restart bluetooth`
-
-### Connection Issues
-- The device can only maintain one BLE connection at a time
-- Close the official Petkit app before using this integration
-- Using certain commands may interfere with the official app's communication
-
-### Debug Logging
-Enable debug logging by adding to your `configuration.yaml`:
-```yaml
-logger:
-  logs:
-    custom_components.petkit_ble: debug
-```
-
-## Translations
-
-The integration supports multiple languages. Currently available:
-- **English** (default)
-- **Magyar / Hungarian**
-- **Nederlands / Dutch** *(based on translations from [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit))*
-- **Українська / Ukrainian** *(based on translations from [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit))*
-
-Home Assistant automatically selects the language based on your user profile settings.
-
-### Adding a new language
-
-1. Create a new JSON file in `custom_components/petkit_ble/translations/` named with the language code (e.g. `de.json` for German, `fr.json` for French)
-2. Copy the structure from `strings.json` and translate the values
-3. Restart Home Assistant
-
-## Known Limitations
-
-- Device can only maintain one active BLE connection
-- Do Not Disturb scheduling not yet fully supported
-- Some advanced LED scheduling features not implemented
-- Using the integration alongside the official app may cause conflicts
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Support
-
-If you find this integration useful, consider supporting the development:
-
-[![coffee](https://www.buymeacoffee.com/assets/img/custom_images/black_img.png)][buymecoffee]
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Credits
-
-- Inspired by [RobertD502's Petkit integration](https://github.com/RobertD502/homeassistant-petkit)
-- Based on [petkitaio library](https://github.com/RobertD502/petkitaio)
-- BLE protocol analysis from [PetKit Eversweet Pro 3 research](https://colab.research.google.com/drive/1gWwLz1Wi_WujvvSaTJpPMW5i3YideSAb)
+</details>
 
 ---
 
-[buymecoffee]: https://www.buymeacoffee.com/pdiegmann
-[buymecoffeebadge]: https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow.svg?style=for-the-badge
-[commits-shield]: https://img.shields.io/github/commit-activity/y/pdiegmann/ha-petkit-ble.svg?style=for-the-badge
-[commits]: https://github.com/pdiegmann/ha-petkit-ble/commits/main
-[license-shield]: https://img.shields.io/github/license/pdiegmann/ha-petkit-ble.svg?style=for-the-badge
-[maintenance-shield]: https://img.shields.io/badge/maintainer-%40pdiegmann-blue.svg?style=for-the-badge
-[releases-shield]: https://img.shields.io/github/release/pdiegmann/ha-petkit-ble.svg?style=for-the-badge
-[releases]: https://github.com/pdiegmann/ha-petkit-ble/releases
+## Translations
+
+| Language | Status |
+|----------|--------|
+| English | default (built-in) |
+| Magyar / Hungarian | complete |
+| Nederlands / Dutch | complete — *based on [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit)* |
+| Ukrainian | complete — *based on [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit)* |
+
+**Add your own:** copy `strings.json` → `translations/{lang_code}.json`, translate values, restart HA.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Device not found | Ensure BT is enabled, device is powered on, HA host is in range. Try `sudo systemctl restart bluetooth`. |
+| Connection drops | Only **one** BLE connection at a time — close the Petkit app first. |
+| Entities unavailable | Check debug logs: add `custom_components.petkit_ble: debug` to `logger:` in `configuration.yaml`. |
+
+---
+
+## Known Limitations
+
+- Device supports only one active BLE connection — the official Petkit app and this integration cannot be used simultaneously
+- CTW3-specific entities (pet detection, AC power, etc.) are disabled by default — enable them manually if your device supports them
+
+---
+
+## Contributing
+
+Contributions are welcome! Feel free to open a PR or issue.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+## Credits
+
+- Originally based on [pdiegmann/ha-petkit-ble](https://github.com/pdiegmann/ha-petkit-ble) — extensively reworked with new entity types, device capability detection, multi-language support, and expanded device compatibility
+- Inspired by [RobertD502's Petkit integration](https://github.com/RobertD502/homeassistant-petkit) and [petkitaio](https://github.com/RobertD502/petkitaio)
+- BLE protocol analysis from [PetKit Eversweet Pro 3 research](https://colab.research.google.com/drive/1gWwLz1Wi_WujvvSaTJpPMW5i3YideSAb)
+- Dutch & Ukrainian translations based on [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit)
+
+---
+
+[commits-shield]: https://img.shields.io/github/commit-activity/y/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
+[commits]: https://github.com/v1k70rk4/ha-petkit-ble/commits/main
+[license-shield]: https://img.shields.io/github/license/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
+[maintenance-shield]: https://img.shields.io/badge/maintainer-%40v1k70rk4-blue.svg?style=for-the-badge
+[releases-shield]: https://img.shields.io/github/release/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
+[releases]: https://github.com/v1k70rk4/ha-petkit-ble/releases

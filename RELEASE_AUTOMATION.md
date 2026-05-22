@@ -89,8 +89,8 @@ Make sure you want to include all changes before running the script.
 
 After running the release script, monitor:
 
-1. **GitHub Actions**: https://github.com/pdiegmann/ha-petkit-ble/actions
-2. **Releases**: https://github.com/pdiegmann/ha-petkit-ble/releases
+1. **GitHub Actions**: https://github.com/v1k70rk4/ha-petkit-ble/actions
+2. **Releases**: https://github.com/v1k70rk4/ha-petkit-ble/releases
 3. **Tags**: Check that the tag was created successfully
 
 ## Troubleshooting

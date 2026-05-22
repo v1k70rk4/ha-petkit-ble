@@ -177,7 +177,7 @@ jobs:
           ## 📦 Installation & Upgrade
           
           ### Via HACS (Recommended)
-          1. ➕ Add custom repository: `https://github.com/pdiegmann/ha-petkit-ble`
+          1. ➕ Add custom repository: `https://github.com/v1k70rk4/ha-petkit-ble`
           2. 📍 Install "PetKit BLE Water Fountain" integration
           3. 🔄 Restart Home Assistant  
           4. ⚙️ Configure via **Configuration** → **Integrations**
@@ -195,10 +195,10 @@ jobs:
           
           ## 🔗 Resources & Support
           
-          - 📈 **Full Changelog**: https://github.com/pdiegmann/ha-petkit-ble/compare/{prev_tag}...{tag}
-          - 📚 **Documentation**: https://github.com/pdiegmann/ha-petkit-ble#readme  
-          - 🐛 **Issues & Support**: https://github.com/pdiegmann/ha-petkit-ble/issues
-          - 📦 **HACS Repository**: https://github.com/pdiegmann/ha-petkit-ble
+          - 📈 **Full Changelog**: https://github.com/v1k70rk4/ha-petkit-ble/compare/{prev_tag}...{tag}
+          - 📚 **Documentation**: https://github.com/v1k70rk4/ha-petkit-ble#readme  
+          - 🐛 **Issues & Support**: https://github.com/v1k70rk4/ha-petkit-ble/issues
+          - 📦 **HACS Repository**: https://github.com/v1k70rk4/ha-petkit-ble
           - 🏠 **Home Assistant Community**: [Forum Discussion](https://community.home-assistant.io/)
           
           ## 🐾 About This Integration
@@ -270,5 +270,5 @@ jobs:
           echo "| Files | ${{ steps.changes.outputs.files_changed }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
-          echo "- [Release Page](https://github.com/pdiegmann/ha-petkit-ble/releases/tag/${{ steps.version.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
-          echo "- [Repository](https://github.com/pdiegmann/ha-petkit-ble)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Release Page](https://github.com/v1k70rk4/ha-petkit-ble/releases/tag/${{ steps.version.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Repository](https://github.com/v1k70rk4/ha-petkit-ble)" >> $GITHUB_STEP_SUMMARY
