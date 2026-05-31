@@ -118,9 +118,12 @@ class PetkitFilterPercentageSensor(PetkitSensorBase):
         """Return the filter percentage remaining."""
         raw_value = self.coordinator.current_data.get("status", {}).get("filter_percentage")
         if raw_value is not None:
-            # Parser returns 0-1 range (e.g. 0.97 = 97% remaining)
-            # Convert to 0-100 percentage for display
-            return round(raw_value * 100, 1)
+            if raw_value <= 1.0:
+                # W4/W5/CTW2 parser returns 0-1 range (e.g. 0.97 = 97%)
+                return round(raw_value * 100, 1)
+            else:
+                # CTW3 parser returns already as percentage (e.g. 13 = 13%)
+                return round(float(raw_value), 1)
         return None
 
 class PetkitFilterTimeLeftSensor(PetkitSensorBase):

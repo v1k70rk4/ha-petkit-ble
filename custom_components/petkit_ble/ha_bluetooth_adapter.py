@@ -311,10 +311,20 @@ class HABluetoothAdapter:
                 self._reconnection_active = False
 
     async def _reconnection_loop(self, address: str) -> bool:
-        """Attempt reconnection with progressive delays."""
+        """Attempt reconnection with progressive delays and periodic BLE reset."""
         while not self.connected_devices.get(address):
             if self._connection_attempts % 5 == 0 or self._connection_attempts < 3:
                 self.logger.info(f"🔁 Reconnection attempt #{self._connection_attempts + 1}")
+
+            # Every 50 attempts, do a full BLE stack reset to recover from
+            # corrupted BlueZ state that no amount of retries can fix
+            if self._connection_attempts > 0 and self._connection_attempts % 50 == 0:
+                self.logger.warning(
+                    f"🔄 {self._connection_attempts} failed attempts — resetting BLE stack"
+                )
+                await self._reset_ble_stack(address)
+                await asyncio.sleep(10)  # Give BlueZ time to recover
+                continue
 
             if await self.connect_device(address):
                 # Restart notifications after reconnect
@@ -333,6 +343,28 @@ class HABluetoothAdapter:
 
         return True
 
+    async def _reset_ble_stack(self, address: str) -> None:
+        """Full BLE stack reset — disconnect, discard client, re-discover device."""
+        try:
+            # Force disconnect stale client
+            client = self.connected_devices.pop(address, None)
+            if client:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+
+            # Discard cached BLE device reference so HA rediscovers it fresh
+            self._client = None
+            self._ble_device = None
+
+            # Re-scan to get a fresh BLE device handle from HA's bluetooth stack
+            self.logger.info("🔍 Re-scanning for device...")
+            await self.scan()
+
+        except Exception as err:
+            self.logger.warning(f"BLE stack reset error: {err}")
+
     def _retry_delay(self) -> float:
         """Progressive retry delay: fast at first, then backs off."""
         n = self._connection_attempts
@@ -342,7 +374,10 @@ class HABluetoothAdapter:
             return 0.5
         if n < 20:
             return 1.0
-        return min(5.0, 1.0 + (n - 20) * 0.5)
+        if n < 50:
+            return min(5.0, 1.0 + (n - 20) * 0.5)
+        # After 50+ attempts, slow down significantly to avoid hammering
+        return 15.0
 
     # ── Heartbeat (no-op, polling handled by coordinator) ──────────
 
