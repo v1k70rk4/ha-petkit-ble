@@ -1,16 +1,10 @@
-<p align="center">
-  <img src="custom_components/petkit_ble/brand/logo.png" alt="Petkit BLE" width="420">
-</p>
+# Petkit BLE Water Fountain — Home Assistant Integration
 
-<h1 align="center">Petkit BLE Water Fountain — Home Assistant Integration</h1>
-
-<p align="center">
-  <a href="https://github.com/custom-components/hacs"><img src="https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge" alt="HACS Custom"></a>
-  <a href="https://github.com/v1k70rk4/ha-petkit-ble/releases"><img src="https://img.shields.io/github/release/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge" alt="Release"></a>
-  <a href="https://github.com/v1k70rk4/ha-petkit-ble/commits/main"><img src="https://img.shields.io/github/commit-activity/y/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge" alt="Activity"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge" alt="License"></a>
-  <img src="https://img.shields.io/badge/maintainer-%40v1k70rk4-blue.svg?style=for-the-badge" alt="Maintenance">
-</p>
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
+[![GitHub Release][releases-shield]][releases]
+[![GitHub Activity][commits-shield]][commits]
+[![License][license-shield]](LICENSE)
+![Maintenance][maintenance-shield]
 
 > **100% local BLE control** for Petkit water fountains — no cloud, no app, no compromises.
 
@@ -272,3 +266,12 @@ MIT — see [LICENSE](LICENSE) for details.
 - Inspired by [RobertD502's Petkit integration](https://github.com/RobertD502/homeassistant-petkit) and [petkitaio](https://github.com/RobertD502/petkitaio)
 - BLE protocol analysis from [PetKit Eversweet Pro 3 research](https://colab.research.google.com/drive/1gWwLz1Wi_WujvvSaTJpPMW5i3YideSAb)
 - Dutch & Ukrainian translations based on [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit)
+
+---
+
+[commits-shield]: https://img.shields.io/github/commit-activity/y/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
+[commits]: https://github.com/v1k70rk4/ha-petkit-ble/commits/main
+[license-shield]: https://img.shields.io/github/license/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
+[maintenance-shield]: https://img.shields.io/badge/maintainer-%40v1k70rk4-blue.svg?style=for-the-badge
+[releases-shield]: https://img.shields.io/github/release/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
+[releases]: https://github.com/v1k70rk4/ha-petkit-ble/releases
