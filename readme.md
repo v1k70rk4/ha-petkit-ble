@@ -38,6 +38,9 @@
 
 ## Installation
 
+> **Requires Home Assistant 2026.3.0 or newer** — the integration ships its brand
+> assets locally, which relies on the local brand-image support added in 2026.3.
+
 ### HACS (Recommended)
 
 1. Open [HACS](https://hacs.xyz/) → **Integrations**
