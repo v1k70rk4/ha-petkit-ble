@@ -1,13 +1,16 @@
 reset_filter:
-  target:
-    device:
-      integration: petkit_ble
+  fields:
+    device_id:
+      selector:
+        device:
+          integration: petkit_ble
 
 set_device_config:
-  target:
-    device:
-      integration: petkit_ble
   fields:
+    device_id:
+      selector:
+        device:
+          integration: petkit_ble
     smart_time_on:
       example: 30
       selector:
