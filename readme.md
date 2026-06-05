@@ -1,9 +1,6 @@
 <p align="center">
-  <img src="custom_components/petkit_ble/brand/logo.png" alt="Petkit BLE" width="420">
+  <img src="custom_components/petkit_ble/brand/logo.png" alt="Petkit BLE">
 </p>
-
-<h1 align="center">Petkit BLE Water Fountain — Home Assistant Integration</h1>
-
 <p align="center">
   <a href="https://github.com/custom-components/hacs"><img src="https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge" alt="HACS Custom"></a>
   <a href="https://github.com/v1k70rk4/ha-petkit-ble/releases"><img src="https://img.shields.io/github/release/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge" alt="Release"></a>
