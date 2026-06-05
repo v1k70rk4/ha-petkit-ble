@@ -1,6 +1,3 @@
-import asyncio
-from .utils import Utils
-from .constants import Constants
 
 class Device:
     def __init__(self, address):

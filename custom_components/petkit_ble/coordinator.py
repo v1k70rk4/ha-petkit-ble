@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .const import DOMAIN, CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+from .const import CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
 from .ha_bluetooth_adapter import HABluetoothAdapter
 
 import sys
@@ -91,7 +91,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         self._initialization_task: asyncio.Task | None = None
         self._poll_count: int = 0
 
-        entry.add_update_listener(self._on_options_updated)
+        entry.async_on_unload(entry.add_update_listener(self._on_options_updated))
 
     # ── Lifecycle ──────────────────────────────────────────────────
 

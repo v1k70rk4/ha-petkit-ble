@@ -239,8 +239,7 @@ class Utils:
     def calculate_energy_usage(alias, pump_runtime_today):
         f = 0
         f2 = 2.0
-        f3 = 1.5
-    
+
         if alias == "W5C":
             f = 0.182
         else:

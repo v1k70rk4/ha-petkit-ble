@@ -1,4 +1,3 @@
-import json
 import asyncio
 from .utils import Utils
 
@@ -224,20 +223,10 @@ class Commands:
     
     # Not used -- maybe never
     async def set_light_setting(self):
-        cmd = 215                           # Command for getting device details
-        type = 1                            # Type is 1 for sending - 2 for receiving
-        seq = self.sequence                 # Example sequence number
-        data = [0]                          # 0 resets it
-
         return
 
     # Not used -- maybe never
     async def set_dnd_setting(self):
-        cmd = 216                           # Command for getting device details
-        type = 1                            # Type is 1 for sending - 2 for receiving
-        seq = self.sequence                 # Example sequence number
-        data = [0]                          # 0 resets it
-
         return
 
     async def set_device_mode(self, state, mode):
@@ -286,20 +275,10 @@ class Commands:
 
     # Not used -- maybe never
     async def set_updated_light(self):
-        cmd = 225                           # Command for getting device details
-        type = 1                            # Type is 1 for sending - 2 for receiving
-        seq = self.sequence                 # Example sequence number
-        data = [0]                          # 0 resets it
-
         return
 
     # Not used -- maybe never
     async def set_updated_dnd(self):
-        cmd = 226                           # Command for getting device details
-        type = 1                            # Type is 1 for sending - 2 for receiving
-        seq = self.sequence                 # Example sequence number
-        data = [0]                          # 0 resets it
-
         return
         
     async def get_device_update(self):

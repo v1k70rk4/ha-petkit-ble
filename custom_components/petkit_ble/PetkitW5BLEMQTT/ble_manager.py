@@ -1,9 +1,6 @@
 from bleak import BleakScanner, BleakClient
 from .constants import Constants
-from .utils import Utils
-from .device import Device
 import asyncio
-import logging
 
 class BLEManager:
     def __init__(self, event_handler, commands, logger, callback=None):
