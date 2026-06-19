@@ -90,6 +90,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         self._listeners: set = set()
         self._initialization_task: asyncio.Task | None = None
         self._poll_count: int = 0
+        self._polls_without_data: int = 0
 
         entry.async_on_unload(entry.add_update_listener(self._on_options_updated))
 
@@ -186,8 +187,8 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 self.device.name_readable = "Water Fountain"
             if not self.device.product_name or self.device.product_name == "Uninitialized":
                 self.device.product_name = "Petkit BLE Water Fountain"
-            if self.device.firmware == 0:
-                self.device.firmware = 1.0
+            # Firmware intentionally left as reported — no fake default, so the
+            # firmware sensor shows "unknown" until the device reports a version
 
             self._initialized = True
             _LOGGER.info(f"Device ready: {self.device.name_readable} ({self.device.serial})")
@@ -229,12 +230,28 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             return
 
         _LOGGER.debug("Polling device...")
+        data_before = self.ble_manager.last_notification
+
         await self.commands.get_battery()
         await asyncio.sleep(0.4)
         await self.commands.get_device_state()
         await asyncio.sleep(0.4)
         await self.commands.get_device_update()
         await asyncio.sleep(0.4)
+
+        # Liveness check: we sent three commands but did any notification come
+        # back? If not for several polls in a row, the device is gone (e.g.
+        # unplugged) even though the BLE stack still claims it's connected —
+        # force a full reconnect so recovery doesn't require an HA restart.
+        if self.ble_manager.last_notification == data_before:
+            self._polls_without_data += 1
+            _LOGGER.debug(f"No data received this poll ({self._polls_without_data}x)")
+            if self._polls_without_data >= 3:
+                self._polls_without_data = 0
+                await self.ble_manager.force_reconnect(self.address)
+                return
+        else:
+            self._polls_without_data = 0
 
         # Sync device clock every ~60 minutes to prevent drift
         self._poll_count += 1

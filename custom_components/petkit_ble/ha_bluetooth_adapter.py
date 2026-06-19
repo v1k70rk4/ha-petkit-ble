@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from enum import Enum
 from typing import Any
 
@@ -40,6 +41,7 @@ class HABluetoothAdapter:
         # Connection state
         self._connection_status = ConnectionStatus.DISCONNECTED
         self._last_seen: str | None = None
+        self._last_notification: float | None = None  # monotonic; set only on real data
         self._connection_attempts = 0
         self._connection_error: str | None = None
         self._reconnect_lock = asyncio.Lock()
@@ -54,6 +56,11 @@ class HABluetoothAdapter:
     @property
     def last_seen(self) -> str | None:
         return self._last_seen
+
+    @property
+    def last_notification(self) -> float | None:
+        """Monotonic timestamp of the last received notification (real data)."""
+        return self._last_notification
 
     @property
     def connection_attempts(self) -> int:
@@ -114,9 +121,19 @@ class HABluetoothAdapter:
                     self.logger.warning(f"Device not found after {self._connection_attempts} attempts")
                 return False
 
+            def _on_disconnect(_client) -> None:
+                # Fires on a clean disconnect — drop the stale client so the next
+                # poll/consumer cycle triggers reconnection instead of writing to a
+                # dead handle. (Ungraceful power loss may not fire this — the
+                # coordinator's liveness check covers that case.)
+                self.logger.info(f"🔌 {address} disconnected")
+                self.connected_devices.pop(address, None)
+                self._set_status(ConnectionStatus.DISCONNECTED)
+
             from bleak import BleakClient
             self._client = await establish_connection(
-                BleakClient, self._ble_device, address, timeout=10.0
+                BleakClient, self._ble_device, address, timeout=10.0,
+                disconnected_callback=_on_disconnect,
             )
 
             self.connected_devices[address] = self._client
@@ -185,10 +202,16 @@ class HABluetoothAdapter:
             return False
 
         try:
-            await client.write_gatt_char(characteristic_uuid, data)
+            # Bound the write — a vanished-but-"connected" device can otherwise
+            # hang write_gatt_char forever, stalling the consumer and the whole
+            # poll loop until an HA restart.
+            await asyncio.wait_for(
+                client.write_gatt_char(characteristic_uuid, data),
+                timeout=10.0,
+            )
             self._touch()
             return True
-        except Exception as err:
+        except (Exception, asyncio.TimeoutError) as err:
             self.logger.warning(f"Write failed: {err}")
             self.connected_devices.pop(address, None)
             self._set_status(ConnectionStatus.RECONNECTING)
@@ -258,6 +281,7 @@ class HABluetoothAdapter:
     async def _on_notification(self, sender, data):
         """Handle incoming BLE notification."""
         self._touch()
+        self._last_notification = time.monotonic()
         self.logger.debug(f"📨 Notification from {sender}: {data.hex() if data else 'None'}")
         if self.event_handler:
             try:
@@ -268,8 +292,16 @@ class HABluetoothAdapter:
     # ── Message queue ──────────────────────────────────────────────
 
     async def message_producer(self, message: bytes) -> None:
-        """Add message to the write queue."""
-        await self.queue.put(message)
+        """Add message to the write queue.
+
+        Non-blocking: if the queue is full the consumer is stuck on a dead
+        connection, so dropping the message is correct — blocking here would
+        freeze the poll loop (and anything else awaiting a command).
+        """
+        try:
+            self.queue.put_nowait(message)
+        except asyncio.QueueFull:
+            self.logger.warning("Write queue full — dropping command (device unresponsive?)")
 
     async def message_consumer(self, address: str, characteristic_uuid: str) -> None:
         """Consume messages from the queue and write them to the device."""
@@ -291,6 +323,25 @@ class HABluetoothAdapter:
                 await asyncio.sleep(1)
 
     # ── Reconnection (single entry point) ──────────────────────────
+
+    async def force_reconnect(self, address: str) -> bool:
+        """Tear down a stale-but-'connected' client and reconnect from scratch.
+
+        Used when the device stops responding (e.g. unplugged) but the BLE stack
+        still reports the client as connected, so the normal write-failure path
+        never fires. Dropping the client makes ensure_connected actually run the
+        reconnection loop again (and the attempt counter starts climbing).
+        """
+        self.logger.warning(f"💀 {address} unresponsive — forcing reconnect")
+        client = self.connected_devices.pop(address, None)
+        if client:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+        self._client = None
+        self._set_status(ConnectionStatus.RECONNECTING)
+        return await self.ensure_connected(address)
 
     async def ensure_connected(self, address: str) -> bool:
         """Single entry point for reconnection. Uses a lock to prevent parallel attempts."""
