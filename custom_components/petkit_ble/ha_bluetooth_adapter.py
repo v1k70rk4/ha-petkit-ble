@@ -121,11 +121,18 @@ class HABluetoothAdapter:
                     self.logger.warning(f"Device not found after {self._connection_attempts} attempts")
                 return False
 
-            def _on_disconnect(_client) -> None:
+            def _on_disconnect(disconnected_client) -> None:
                 # Fires on a clean disconnect — drop the stale client so the next
                 # poll/consumer cycle triggers reconnection instead of writing to a
                 # dead handle. (Ungraceful power loss may not fire this — the
                 # coordinator's liveness check covers that case.)
+                #
+                # Identity check is critical: a late callback from a PREVIOUS
+                # client must not evict the current healthy one (which would
+                # leave that client connected but untracked, holding the single
+                # allowed BLE slot forever).
+                if self.connected_devices.get(address) is not disconnected_client:
+                    return
                 self.logger.info(f"🔌 {address} disconnected")
                 self.connected_devices.pop(address, None)
                 self._set_status(ConnectionStatus.DISCONNECTED)
@@ -196,7 +203,12 @@ class HABluetoothAdapter:
 
         if hasattr(client, 'is_connected') and not client.is_connected:
             self.logger.warning("Client stale, requesting reconnect")
-            self.connected_devices.pop(address, None)
+            stale = self.connected_devices.pop(address, None)
+            if stale:
+                try:
+                    await stale.disconnect()
+                except Exception:
+                    pass
             self._set_status(ConnectionStatus.RECONNECTING)
             asyncio.create_task(self.ensure_connected(address))
             return False
@@ -213,7 +225,15 @@ class HABluetoothAdapter:
             return True
         except (Exception, asyncio.TimeoutError) as err:
             self.logger.warning(f"Write failed: {err}")
-            self.connected_devices.pop(address, None)
+            # Physically disconnect the dead client — popping alone leaves it
+            # holding the device's single BLE connection slot as an untracked
+            # ghost, which blocks every future reconnect until an HA restart.
+            stale = self.connected_devices.pop(address, None)
+            if stale:
+                try:
+                    await stale.disconnect()
+                except Exception:
+                    pass
             self._set_status(ConnectionStatus.RECONNECTING)
             asyncio.create_task(self.ensure_connected(address))
             return False
@@ -221,50 +241,52 @@ class HABluetoothAdapter:
     # ── Notifications ──────────────────────────────────────────────
 
     async def start_notifications(self, address: str, characteristic_uuid: str) -> bool:
-        """Start GATT notifications. Handles already-acquired state from previous sessions."""
+        """Start GATT notifications, retrying while BlueZ resolves the GATT tree.
+
+        Right after a reconnect the device's characteristics may not be resolved
+        yet, which surfaces as 'UnknownObject' / 'Unlikely Error'. Those are
+        transient — a short wait and retry usually succeeds. Returns False only
+        if it genuinely can't subscribe, so the caller can tear the link down.
+        """
         client = self.connected_devices.get(address)
         if not client:
             self.logger.error(f"Device {address} not connected")
             return False
 
-        # Always try to clear stale notification state from previous session first
-        try:
-            await client.stop_notify(characteristic_uuid)
-            self.logger.debug("Cleared previous notification subscription")
-            await asyncio.sleep(0.1)
-        except Exception:
-            pass  # No previous subscription — that's fine
-
-        try:
-            await client.start_notify(characteristic_uuid, self._on_notification)
-            self.logger.info(f"Notifications started ({characteristic_uuid})")
-            return True
-        except Exception as err:
-            if "NotPermitted" in str(err) or "acquired" in str(err).lower():
-                # BlueZ still thinks notifications are acquired despite our stop attempt.
-                # Force disconnect + reconnect to reset BlueZ state.
-                self.logger.warning("Notifications stuck in acquired state, reconnecting to reset...")
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
-                self.connected_devices.pop(address, None)
-
-                # Reconnect with fresh state
-                if await self.connect_device(address):
-                    new_client = self.connected_devices.get(address)
-                    if new_client:
-                        try:
-                            await new_client.start_notify(characteristic_uuid, self._on_notification)
-                            self.logger.info(f"Notifications started after reconnect ({characteristic_uuid})")
-                            return True
-                        except Exception as retry_err:
-                            self.logger.error(f"Notifications failed even after reconnect: {retry_err}")
-                            return False
+        for attempt in range(4):
+            if hasattr(client, "is_connected") and not client.is_connected:
+                self.logger.debug("Client disconnected before notifications could start")
                 return False
 
-            self.logger.error(f"Error starting notifications: {err}")
-            return False
+            try:
+                await client.start_notify(characteristic_uuid, self._on_notification)
+                self.logger.info(f"Notifications started ({characteristic_uuid})")
+                return True
+            except Exception as err:
+                msg = str(err)
+
+                if "NotPermitted" in msg or "acquired" in msg.lower():
+                    # BlueZ still holds a stale subscription — clear it and retry.
+                    self.logger.warning("Notifications still acquired, clearing and retrying...")
+                    try:
+                        await client.stop_notify(characteristic_uuid)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.3)
+                    continue
+
+                if any(s in msg for s in ("UnknownObject", "Unlikely", "UNLIKELY")) \
+                        or "not connected" in msg.lower():
+                    # GATT services not resolved yet — wait briefly and retry.
+                    self.logger.debug(f"GATT not ready (attempt {attempt + 1}/4): {err}")
+                    await asyncio.sleep(0.5)
+                    continue
+
+                self.logger.error(f"Error starting notifications: {err}")
+                return False
+
+        self.logger.warning("Could not start notifications after retries")
+        return False
 
     async def stop_notifications(self, address: str, characteristic_uuid: str) -> bool:
         """Stop GATT notifications."""
@@ -377,14 +399,23 @@ class HABluetoothAdapter:
                 continue
 
             if await self.connect_device(address):
-                # Restart notifications after reconnect
-                try:
-                    from .PetkitW5BLEMQTT.constants import Constants
-                    await self.start_notifications(address, Constants.READ_UUID)
+                # A connection without working notifications is useless (no data
+                # flows), so only count it as success if the subscribe works too.
+                from .PetkitW5BLEMQTT.constants import Constants
+                if await self.start_notifications(address, Constants.READ_UUID):
                     self.logger.info("📡 Notifications restarted")
-                except Exception as e:
-                    self.logger.warning(f"Failed to restart notifications: {e}")
-                return True
+                    return True
+
+                # Connected but couldn't subscribe — tear it down and retry from
+                # scratch instead of declaring a false success.
+                self.logger.warning("Reconnected but notifications failed; tearing down to retry")
+                client = self.connected_devices.pop(address, None)
+                if client:
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        pass
+                self._connection_attempts += 1
 
             delay = self._retry_delay()
             if self._connection_attempts % 10 == 0:

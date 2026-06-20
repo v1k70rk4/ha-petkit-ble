@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from homeassistant.components import bluetooth
@@ -89,8 +90,11 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         self._initialized = False
         self._listeners: set = set()
         self._initialization_task: asyncio.Task | None = None
+        self._reconnect_task: asyncio.Task | None = None
         self._poll_count: int = 0
-        self._polls_without_data: int = 0
+        # Force a reconnect if no real data arrives for this long. Time-based so
+        # detection doesn't depend on the (possibly large) poll interval.
+        self._data_timeout: float = max(30.0, self.update_interval * 3)
 
         entry.async_on_unload(entry.add_update_listener(self._on_options_updated))
 
@@ -222,15 +226,37 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 _LOGGER.warning(f"Poll error: {err}")
                 await asyncio.sleep(5)
 
+    def _trigger_reconnect(self, *, force: bool = False) -> None:
+        """Kick off reconnection in the background (never blocks the poll loop).
+
+        A single guarded task does the work; repeated calls while it's running
+        are no-ops. Keeping this off the poll loop is what lets the liveness
+        check keep running every interval instead of stalling on the reconnect
+        lock for minutes.
+        """
+        if self._reconnect_task and not self._reconnect_task.done():
+            return
+
+        async def _run() -> None:
+            try:
+                if force:
+                    await self.ble_manager.force_reconnect(self.address)
+                else:
+                    await self.ble_manager.ensure_connected(self.address)
+            except Exception as err:
+                _LOGGER.warning(f"Reconnect task error: {err}")
+
+        self._reconnect_task = asyncio.create_task(_run())
+
     async def _poll_device(self) -> None:
         """Send BLE commands to refresh device data."""
         if not self.ble_manager.connected_devices.get(self.address):
             _LOGGER.debug("Device not connected, requesting reconnect")
-            await self.ble_manager.ensure_connected(self.address)
+            self._trigger_reconnect()
+            self.async_update_listeners()  # push connecting/reconnecting status
             return
 
         _LOGGER.debug("Polling device...")
-        data_before = self.ble_manager.last_notification
 
         await self.commands.get_battery()
         await asyncio.sleep(0.4)
@@ -239,19 +265,22 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         await self.commands.get_device_update()
         await asyncio.sleep(0.4)
 
-        # Liveness check: we sent three commands but did any notification come
-        # back? If not for several polls in a row, the device is gone (e.g.
-        # unplugged) even though the BLE stack still claims it's connected —
-        # force a full reconnect so recovery doesn't require an HA restart.
-        if self.ble_manager.last_notification == data_before:
-            self._polls_without_data += 1
-            _LOGGER.debug(f"No data received this poll ({self._polls_without_data}x)")
-            if self._polls_without_data >= 3:
-                self._polls_without_data = 0
-                await self.ble_manager.force_reconnect(self.address)
-                return
-        else:
-            self._polls_without_data = 0
+        # Liveness check (time-based): writes to a vanished-but-"connected"
+        # device can silently "succeed" without ever returning data, so we can't
+        # rely on write failures. If no notification has arrived for too long,
+        # the device is gone (e.g. unplugged) — force a reconnect so recovery
+        # (and detecting a replug) doesn't require an HA restart. Non-blocking so
+        # the next poll still runs and re-evaluates.
+        last = self.ble_manager.last_notification
+        idle = None if last is None else (time.monotonic() - last)
+        if idle is None or idle > self._data_timeout:
+            _LOGGER.warning(
+                "No data for %s — forcing reconnect",
+                "ever" if idle is None else f"{idle:.0f}s",
+            )
+            self._trigger_reconnect(force=True)
+            self.async_update_listeners()  # push reconnecting status
+            return
 
         # Sync device clock every ~60 minutes to prevent drift
         self._poll_count += 1
@@ -310,6 +339,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def _on_options_updated(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         old = self.update_interval
         self.update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        self._data_timeout = max(30.0, self.update_interval * 3)
         if old != self.update_interval:
             _LOGGER.info(f"Update interval changed: {old}s → {self.update_interval}s")
 
@@ -322,6 +352,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             ("_consumer_task", self._consumer_task),
             ("_polling_task", self._polling_task),
             ("_initialization_task", self._initialization_task),
+            ("_reconnect_task", self._reconnect_task),
         )
         for attr, task in tasks:
             if task is current_task:
