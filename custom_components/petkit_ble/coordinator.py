@@ -240,13 +240,37 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         async def _run() -> None:
             try:
                 if force:
-                    await self.ble_manager.force_reconnect(self.address)
+                    ok = await self.ble_manager.force_reconnect(self.address)
                 else:
-                    await self.ble_manager.ensure_connected(self.address)
+                    ok = await self.ble_manager.ensure_connected(self.address)
+                # A reconnect only opens the link + notifications. If the device
+                # power-cycled it has forgotten its authenticated session (CMD 73)
+                # and will drop us after a few seconds → connect/disconnect flap.
+                # Re-run the auth handshake, exactly like a fresh setup does.
+                if ok and self.ble_manager.connected_devices.get(self.address):
+                    await self._reinit_device()
             except Exception as err:
                 _LOGGER.warning(f"Reconnect task error: {err}")
 
         self._reconnect_task = asyncio.create_task(_run())
+
+    async def _reinit_device(self) -> None:
+        """Re-authenticate after a reconnect in case the device rebooted.
+
+        get_device_details reports the device's *actual* init state: a device
+        that power-cycled comes back uninitialized and needs CMD 73 again to keep
+        the connection alive; a device that only briefly dropped reports itself
+        initialized, so init_device is skipped.
+        """
+        try:
+            await self.commands.get_device_details()
+            await asyncio.sleep(1.0)
+            if not self.device.device_initialized:
+                _LOGGER.info("Device re-initialised after reconnect (was power-cycled)")
+                await self.commands.init_device()
+                await asyncio.sleep(1.0)
+        except Exception as err:
+            _LOGGER.warning(f"Re-init after reconnect failed: {err}")
 
     async def _poll_device(self) -> None:
         """Send BLE commands to refresh device data."""
