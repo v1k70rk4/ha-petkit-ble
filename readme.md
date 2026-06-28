@@ -237,7 +237,37 @@ automation:
 |---------|-----|
 | Device not found | Ensure BT is enabled, device is powered on, HA host is in range. Try `sudo systemctl restart bluetooth`. |
 | Connection drops | Only **one** BLE connection at a time — close the Petkit app first. |
-| Entities unavailable | Check debug logs: add `custom_components.petkit_ble: debug` to `logger:` in `configuration.yaml`. |
+| Entities unavailable | Enable debug logging (below) and check the logs. |
+
+### Debug logging
+
+For connection issues, enable verbose logging for the integration **and** the
+underlying Bluetooth stack — the BLE libraries reveal *why* a connection fails:
+
+```yaml
+# configuration.yaml
+logger:
+  default: warning
+  logs:
+    custom_components.petkit_ble: debug
+    bleak_retry_connector: debug
+    habluetooth: debug
+    bleak: debug
+    homeassistant.components.bluetooth: debug
+```
+
+Or enable it at runtime without a restart — **Developer Tools → Actions**:
+
+```yaml
+action: logger.set_level
+data:
+  custom_components.petkit_ble: debug
+  bleak_retry_connector: debug
+```
+
+Reload the integration (or restart HA) afterwards, reproduce the issue, and the
+logs will show the BLE device details, the exact connection error, and the
+reconnection flow. Set the levels back to `warning` / `info` when done.
 
 ---
 

@@ -116,6 +116,12 @@ class HABluetoothAdapter:
                 self.hass, address, connectable=True
             )
             if not self._ble_device:
+                # bleak-retry-connector#302: recent versions (HA 2026.7 beta)
+                # regressed on MAC case — also try the lowercase form for lookup.
+                self._ble_device = bluetooth.async_ble_device_from_address(
+                    self.hass, address.lower(), connectable=True
+                )
+            if not self._ble_device:
                 self._connection_attempts += 1
                 if self._connection_attempts % 5 == 0:
                     self.logger.warning(f"Device not found after {self._connection_attempts} attempts")
@@ -138,8 +144,18 @@ class HABluetoothAdapter:
                 self._set_status(ConnectionStatus.DISCONNECTED)
 
             from bleak import BleakClient
+            # Workaround for bleak-retry-connector#302: an uppercase MAC fails to
+            # connect on recent versions (HA 2026.7 beta) while lowercase works.
+            # Harmless on older versions (matched case-insensitively there).
+            self.logger.debug(
+                "establish_connection: ble_device.address=%r name=%r details=%r passing addr=%r",
+                getattr(self._ble_device, "address", None),
+                getattr(self._ble_device, "name", None),
+                getattr(self._ble_device, "details", None),
+                address.lower(),
+            )
             self._client = await establish_connection(
-                BleakClient, self._ble_device, address, timeout=10.0,
+                BleakClient, self._ble_device, address.lower(), timeout=10.0,
                 disconnected_callback=_on_disconnect,
             )
 
@@ -154,14 +170,22 @@ class HABluetoothAdapter:
 
         except asyncio.TimeoutError:
             self._connection_attempts += 1
+            self.logger.debug("Connect timeout (attempt %s)", self._connection_attempts)
             if self._connection_attempts % 3 == 0:
                 self.logger.warning(f"⏱️ Timeout after {self._connection_attempts} attempts")
             return False
 
         except Exception as err:
             self._connection_attempts += 1
+            # Full detail every attempt at debug level for diagnosing connect failures.
+            self.logger.debug(
+                "Connect failed (attempt %s): %s: %s",
+                self._connection_attempts, type(err).__name__, err,
+            )
             if self._connection_attempts % 5 == 0:
-                self.logger.warning(f"❌ Connection failed ({self._connection_attempts}x): {err}")
+                self.logger.warning(
+                    f"❌ Connection failed ({self._connection_attempts}x): {type(err).__name__}: {err}"
+                )
             return False
 
     async def disconnect_device(self, address: str) -> bool:
