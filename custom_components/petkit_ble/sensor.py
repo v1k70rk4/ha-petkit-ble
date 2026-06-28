@@ -62,7 +62,7 @@ class PetkitSensorBase(CoordinatorEntity[PetkitBLECoordinator], SensorEntity):
             "identifiers": {(DOMAIN, device_id)},
             "name": device_name,
             "manufacturer": "Petkit",
-            "model": self.coordinator.device.product_name or "Water Fountain",
+            "model": self.coordinator.device.product_name if self.coordinator.device.product_name not in (None, "", "Uninitialized") else "Water Fountain",
             "sw_version": str(self.coordinator.device.firmware) if self.coordinator.device.firmware else "Unknown",
         }
 

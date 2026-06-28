@@ -265,6 +265,13 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         await self.commands.get_device_update()
         await asyncio.sleep(0.4)
 
+        # Device info (firmware/serial) is only fetched once at init. If that
+        # handshake was interrupted (e.g. a flapping connection), re-fetch it
+        # here until firmware is known, so it self-heals without a reload.
+        if not self.device.firmware:
+            await self.commands.get_device_details()
+            await asyncio.sleep(0.4)
+
         # Liveness check (time-based): writes to a vanished-but-"connected"
         # device can silently "succeed" without ever returning data, so we can't
         # rely on write failures. If no notification has arrived for too long,
