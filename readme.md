@@ -5,6 +5,7 @@
 [![GitHub Activity][commits-shield]][commits]
 [![License][license-shield]](LICENSE)
 ![Maintenance][maintenance-shield]
+[![Ko-fi][kofi-shield]][kofi]
 
 > **100% local BLE control** for Petkit water fountains — no cloud, no app, no compromises.
 
@@ -284,6 +285,14 @@ Contributions are welcome! Feel free to open a PR or issue.
 
 ---
 
+## Support
+
+This integration is developed in my spare time. If it's useful to you, a coffee is always appreciated — thank you! ☕
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/v1k70rk4)
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
@@ -301,6 +310,8 @@ MIT — see [LICENSE](LICENSE) for details.
 
 [commits-shield]: https://img.shields.io/github/commit-activity/y/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
 [commits]: https://github.com/v1k70rk4/ha-petkit-ble/commits/main
+[kofi-shield]: https://img.shields.io/badge/Ko--fi-support-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white
+[kofi]: https://ko-fi.com/v1k70rk4
 [license-shield]: https://img.shields.io/github/license/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
 [maintenance-shield]: https://img.shields.io/badge/maintainer-%40v1k70rk4-blue.svg?style=for-the-badge
 [releases-shield]: https://img.shields.io/github/release/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
