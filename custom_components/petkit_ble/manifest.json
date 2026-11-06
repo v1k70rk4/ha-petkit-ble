@@ -6,6 +6,11 @@
       "connectable": true
     }
   ],
+  "categories": [
+    "pets",
+    "appliances_cleaning",
+    "water"
+  ],
   "codeowners": [
     "@v1k70rk4"
   ],
