@@ -278,16 +278,21 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         if entry is None:
             return
         changes: dict[str, str] = {}
-        if self._serial_known() and entry.serial_number != self.device.serial:
-            changes["serial_number"] = self.device.serial
+        serial = self._clean_serial()
+        if self._serial_known() and entry.serial_number != serial:
+            changes["serial_number"] = serial
         if self.device.firmware and entry.sw_version != str(self.device.firmware):
             changes["sw_version"] = str(self.device.firmware)
         if changes:
             dev_reg.async_update_device(entry.id, **changes)
 
+    def _clean_serial(self) -> str:
+        """Return the serial without the NUL/space padding of the CMD 213 field."""
+        return str(self.device.serial or "").strip("\x00 ")
+
     def _serial_known(self) -> bool:
         """Return True once the device has reported its real serial (CMD 213)."""
-        serial = str(self.device.serial or "").strip("\x00 ")
+        serial = self._clean_serial()
         return (
             bool(serial)
             and serial != "Uninitialized"
