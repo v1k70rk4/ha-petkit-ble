@@ -197,8 +197,12 @@ cleanup_on_error() {
     elif [ "$BRANCH_CREATED" != true ]; then
         :  # failed before this run created $BRANCH; leave any such branch alone
     elif [ "$remote_status" -eq 2 ]; then
-        git branch -q -D "$BRANCH" 2>/dev/null
-        echo -e "${YELLOW}💡 Nothing was pushed; the local $BRANCH branch was removed.${NC}" >&2
+        if git branch -q -D "$BRANCH" 2>/dev/null; then
+            echo -e "${YELLOW}💡 Nothing was pushed; the local $BRANCH branch was removed.${NC}" >&2
+        else
+            echo -e "${YELLOW}💡 Nothing was pushed, but the local $BRANCH branch could not be removed." >&2
+            echo -e "   Delete it by hand: git branch -D $BRANCH${NC}" >&2
+        fi
     else
         echo -e "${YELLOW}💡 Could not tell whether $BRANCH reached GitHub; the local branch was kept." >&2
         echo -e "   Check with: git ls-remote --heads origin $BRANCH${NC}" >&2
