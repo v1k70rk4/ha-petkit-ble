@@ -17,12 +17,17 @@ jobs:
         id: metadata
         uses: dependabot/fetch-metadata@v3
 
-      # Major updates may break workflows and are left for manual review.
+      # Only proven minor or patch updates are merged automatically. A major or
+      # unclassified update anywhere in a group leaves the PR for manual review.
       - name: Approve and enable auto-merge for minor and patch updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         env:
+          DEPS: ${{ steps.metadata.outputs.updated-dependencies-json }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr review --approve "$PR_URL"
-          gh pr merge --auto --squash "$PR_URL"
+          if jq -e 'length > 0 and all(.[]; .updateType == "version-update:semver-minor" or .updateType == "version-update:semver-patch")' <<<"$DEPS" >/dev/null; then
+            gh pr review --approve "$PR_URL"
+            gh pr merge --auto --squash "$PR_URL"
+          else
+            echo "Not every update is a minor or patch update; leaving for manual review."
+          fi
