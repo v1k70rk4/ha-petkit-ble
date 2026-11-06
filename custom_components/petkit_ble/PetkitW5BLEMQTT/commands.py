@@ -106,9 +106,6 @@ class Commands:
         device_id = Utils.pad_array(self.device.device_id_bytes, 8)
         
         data = [0, 0] + device_id + self.secret    # Placeholders
-        self.logger.debug(f"Device ID: {device_id}")
-        self.logger.debug(f"Secret: {self.secret}")
-        self.logger.debug(f"Data: {data}")
         
         bytes = Utils.build_command(seq, cmd, type, data)
         await self.ble_manager.message_producer(bytes)
@@ -203,9 +200,10 @@ class Commands:
         self.logger.info(f"Queued command: {cmd}")
         return
 
-    async def get_device_details(self):
+    async def get_device_details(self, force: bool = False):
     
-        if self.device.device_id:
+        # force=True re-asks even with a cached id, e.g. to recover the serial
+        if self.device.device_id and not force:
             return
         
         cmd = 213                           # Command for getting device details

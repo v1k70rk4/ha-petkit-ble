@@ -213,5 +213,10 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "device_not_found": {
+      "message": "Вибраний пристрій не є завантаженим фонтаном Petkit BLE."
+    }
   }
 }

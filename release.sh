@@ -79,13 +79,13 @@ show_usage() {
     echo ""
     echo -e "${YELLOW}What the script does:${NC}"
     echo "  1. 🔍 Checks for remote updates and pulls if needed"
-    echo "  2. 📦 Stages all uncommitted changes"
+    echo "  2. 📦 Sets manifest.json version and stages all uncommitted changes"
     echo "  3. 📝 Creates commit with semantic versioning message"
     echo "  4. 🚀 Pushes commits and creates version tag"
-    echo "  5. 🤖 Triggers GitHub workflow for release creation"
-    echo "  6. ✨ Updates manifest.json automatically via workflow"
+    echo "  5. 🤖 Triggers the GitHub release workflow"
     echo ""
-    echo -e "${BLUE}💡 Note:${NC} Never manually edit manifest.json version - it's handled automatically!"
+    echo -e "${BLUE}💡 Note:${NC} The script sets the manifest.json version before committing;"
+    echo "   the workflow only checks that it matches the tag."
 }
 
 # Parse flags
@@ -265,6 +265,15 @@ else
     echo "[DRY RUN] Would check for remote updates and pull if needed"
 fi
 
+# Bump manifest.json here: the release workflow only verifies that it
+# matches the tag and never pushes to main itself.
+show_info "Setting manifest.json version to $NEW_VERSION..."
+if [ "$DRY_RUN" != true ]; then
+    PYTHONIOENCODING=utf-8 python3 .github/update-manifest-version.py "$NEW_VERSION"
+else
+    echo "[DRY RUN] Would set manifest.json version to $NEW_VERSION"
+fi
+
 # Stage all changes
 show_info "Staging all changes..."
 if [ "$DRY_RUN" != true ]; then
@@ -396,8 +405,7 @@ echo -e "${GREEN}🎉 Release v$NEW_VERSION completed successfully!${NC}"
 echo ""
 echo -e "${BLUE}📋 What happens next:${NC}"
 echo "  1. ✅ Commits and tag pushed to GitHub"
-echo "  2. 🤖 GitHub Actions workflow will update manifest.json"
-echo "  3. 📦 GitHub release will be created automatically"
-echo "  4. 🔗 Release URL: https://github.com/v1k70rk4/ha-petkit-ble/releases/tag/v$NEW_VERSION"
+echo "  2. 📦 GitHub release will be created automatically (if it does not exist yet)"
+echo "  3. 🔗 Release URL: https://github.com/v1k70rk4/ha-petkit-ble/releases/tag/v$NEW_VERSION"
 echo ""
 echo -e "${YELLOW}⏱️  The GitHub workflow typically takes 1-2 minutes to complete.${NC}"

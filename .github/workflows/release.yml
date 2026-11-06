@@ -1,372 +1,76 @@
-name: 🚀 Automated Release with AI-Generated Changelog
+name: Release
 
+# One workflow per version tag. It never pushes to main and never rewrites a
+# release that already exists, so hand-written release notes stay as they are.
 on:
   push:
     tags:
-      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v0.1.18, etc.
+      - "v*"
 
 permissions:
-  contents: write
-  pull-requests: read
+  contents: read
 
 jobs:
-  create-release:
+  release:
+    name: Create release
     runs-on: ubuntu-latest
-    name: 🤖 Create AI-Generated Release
-    
+    permissions:
+      contents: write
     steps:
-      - name: 📥 Checkout Repository
+      - name: Validate tag
+        id: tag
+        # The tag name is only ever read from the environment, never
+        # interpolated into the script, and must be a plain version.
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Refusing to release from an unexpected tag name"
+            exit 1
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout tag
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0  # Fetch all history for comprehensive changelog
-      
-      - name: 🏷️ Extract Version Info
-        id: version
-        run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG_NAME#v}
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          # Consistent prerelease detection - only pure semver (x.y.z) are stable releases
-          if [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
-          else
-            echo "is_prerelease=true" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.x'
-      
-      - name: 📝 Update manifest.json version
-        run: |
-          # Update the version in manifest.json to match the tag version
-          MANIFEST_PATH="custom_components/petkit_ble/manifest.json"
-          
-          if [ -f "$MANIFEST_PATH" ]; then
-            echo "📋 Current manifest.json:"
-            cat "$MANIFEST_PATH"
-            
-            # Use Python script for reliable JSON manipulation
-            python .github/update-manifest-version.py "${{ steps.version.outputs.version }}"
-            
-            echo "✅ Updated manifest.json:"
-            cat "$MANIFEST_PATH"
-            
-            # Commit the change if there are differences
-            if ! git diff --quiet "$MANIFEST_PATH"; then
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add "$MANIFEST_PATH"
-              git commit -m "chore: update manifest.json version to ${{ steps.version.outputs.version }}"
-              
-              # Create a new tag pointing to the updated commit
-              git tag -f "${{ steps.version.outputs.tag_name }}" -m "Release ${{ steps.version.outputs.version }} with updated manifest"
-              
-              # Push the changes and updated tag
-              git push origin HEAD:main --force-with-lease
-              git push origin "${{ steps.version.outputs.tag_name }}" --force
-              
-              echo "📦 Manifest version updated and pushed"
-            else
-              echo "ℹ️ Manifest version already matches tag version"
-            fi
-          else
-            echo "⚠️ Warning: manifest.json not found at $MANIFEST_PATH"
-          fi
-      
-      - name: 📊 Generate Commit Analysis
-        id: commits
-        run: |
-          # Get previous tag for comparison
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${{ steps.version.outputs.tag_name }}$" | head -n 1)
-          if [ -z "$PREVIOUS_TAG" ]; then
-            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-          
-          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
-          
-          # Generate commit summary
-          COMMIT_RANGE="$PREVIOUS_TAG..${{ steps.version.outputs.tag_name }}"
-          echo "commit_range=$COMMIT_RANGE" >> $GITHUB_OUTPUT
-          
-          # Get detailed commit information
-          git log --pretty=format:"- **%s** (%h) by %an%n  %b" $COMMIT_RANGE > commits.txt || echo "- Initial release" > commits.txt
-          
-          # Count changes
-          FILES_CHANGED=$(git diff --name-only $PREVIOUS_TAG..${{ steps.version.outputs.tag_name }} | wc -l || echo "0")
-          COMMITS_COUNT=$(git rev-list --count $COMMIT_RANGE || echo "1")
-          
-          echo "files_changed=$FILES_CHANGED" >> $GITHUB_OUTPUT
-          echo "commits_count=$COMMITS_COUNT" >> $GITHUB_OUTPUT
 
-      - name: 🧠 Generate AI-Powered Release Notes
-        id: ai_release
-        uses: peter-murray/workflow-application-token-action@v5
-        with:
-          application_id: ${{ secrets.APP_ID }}
-          application_private_key: ${{ secrets.APP_PRIVATE_KEY }}
-        continue-on-error: true
-        
-      - name: 🤖 Create Release Notes with OpenAI
-        id: openai_release
-        if: env.OPENAI_API_KEY != ''
+      - name: Check manifest version matches the tag
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          VERSION: ${{ steps.tag.outputs.version }}
         run: |
-          cat > generate_release_notes.py << 'EOF'
-          import os
-          import openai
-          import json
-          
-          # Read commit data
-          with open('commits.txt', 'r') as f:
-              commits = f.read()
-          
-          # Configure OpenAI
-          openai.api_key = os.getenv('OPENAI_API_KEY')
-          
-          prompt = f"""
-          You are a technical documentation expert creating GitHub release notes.
-          
-          Create professional release notes for PetKit W5 BLE MQTT v${{ steps.version.outputs.version }}.
-          
-          Project: Home Assistant integration for Petkit water fountains via Bluetooth Low Energy
-          Audience: Home Assistant users, IoT enthusiasts, pet owners
-          
-          Version: ${{ steps.version.outputs.version }}
-          Previous: ${{ steps.commits.outputs.previous_tag }}
-          Commits: ${{ steps.commits.outputs.commits_count }}
-          Files: ${{ steps.commits.outputs.files_changed }}
-          
-          Recent Changes:
-          {commits}
-          
-          Generate comprehensive release notes with:
-          1. 🚀 Release Highlights (key improvements summary)
-          2. ✨ New Features (new capabilities)
-          3. 🐛 Bug Fixes (issues resolved)
-          4. ⚡ Performance & Reliability (optimizations)
-          5. 🔧 Technical Changes (developer notes)
-          6. 📚 Documentation (updates)
-          7. 🔗 Links (changelog, issues)
-          
-          Use professional tone, clear structure, emojis for visual appeal.
-          Focus on BLE connectivity, device reliability, Home Assistant integration benefits.
-          """
-          
-          try:
-              response = openai.ChatCompletion.create(
-                  model="gpt-3.5-turbo",
-                  messages=[
-                      {"role": "system", "content": "You are a technical documentation expert specializing in IoT and Home Assistant integrations."},
-                      {"role": "user", "content": prompt}
-                  ],
-                  max_tokens=2000,
-                  temperature=0.7
-              )
-              
-              release_notes = response.choices[0].message.content
-              
-              # Save to file
-              with open('ai_release_notes.md', 'w') as f:
-                  f.write(release_notes)
-              
-              # Set output for GitHub Actions
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f"result<<EOF\n{release_notes}\nEOF\n")
-                  
-              print("✅ AI release notes generated successfully")
-              
-          except Exception as e:
-              print(f"❌ OpenAI API failed: {e}")
-              # Fallback to manual template
-              fallback_notes = f"""
-          ## 🚀 Release ${{ steps.version.outputs.version }}
-          
-          ### 📋 Changes in this Release
-          {commits}
-          
-          ### 📊 Release Statistics
-          - 📦 **Commits**: ${{ steps.commits.outputs.commits_count }}
-          - 📁 **Files Changed**: ${{ steps.commits.outputs.files_changed }}
-          - 🏷️ **Version**: ${{ steps.version.outputs.version }}
-          
-          ### 🔗 Links
-          - **Full Changelog**: https://github.com/v1k70rk4/ha-petkit-ble/compare/${{ steps.commits.outputs.previous_tag }}...${{ steps.version.outputs.tag_name }}
-          - **Issues**: https://github.com/v1k70rk4/ha-petkit-ble/issues
-          """
-              
-              with open('ai_release_notes.md', 'w') as f:
-                  f.write(fallback_notes)
-              
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f"result<<EOF\n{fallback_notes}\nEOF\n")
-          EOF
-          
-          python generate_release_notes.py
-
-      - name: 📝 Enhanced Release Notes Generation
-        id: enhanced_notes
-        if: steps.openai_release.outcome != 'success'
-        run: |
-          # Create comprehensive release notes using commit analysis
-          cat > enhanced_release_notes.py << 'EOF'
-          import re
-          import os
-          
-          # Read commits
-          with open('commits.txt', 'r') as f:
-              commits_content = f.read()
-          
-          # Categorize commits
-          features = []
-          fixes = []
-          performance = []
-          docs = []
-          other = []
-          
-          for line in commits_content.split('\n'):
-              if line.strip():
-                  line_lower = line.lower()
-                  if any(word in line_lower for word in ['feat', 'add', 'new', 'implement']):
-                      features.append(line)
-                  elif any(word in line_lower for word in ['fix', 'bug', 'issue', 'resolve']):
-                      fixes.append(line)
-                  elif any(word in line_lower for word in ['perf', 'optim', 'improve', 'enhance', 'speed']):
-                      performance.append(line)
-                  elif any(word in line_lower for word in ['doc', 'readme', 'guide']):
-                      docs.append(line)
-                  else:
-                      other.append(line)
-          
-          # Generate structured release notes
-          release_notes = f"""
-          ## 🚀 Release ${{ steps.version.outputs.version }} - PetKit BLE Integration
-          
-          Professional Home Assistant integration for Petkit W5 water fountains via Bluetooth Low Energy.
-          
-          ### 📊 Release Overview
-          - **Version**: ${{ steps.version.outputs.version }}
-          - **Previous Release**: ${{ steps.commits.outputs.previous_tag }}
-          - **Commits**: ${{ steps.commits.outputs.commits_count }} changes
-          - **Files Modified**: ${{ steps.commits.outputs.files_changed }} files
-          
-          """
-          
-          if features:
-              release_notes += "\n### ✨ New Features & Enhancements\n"
-              for feature in features:
-                  release_notes += f"- {feature}\n"
-          
-          if fixes:
-              release_notes += "\n### 🐛 Bug Fixes & Stability\n"
-              for fix in fixes:
-                  release_notes += f"- {fix}\n"
-          
-          if performance:
-              release_notes += "\n### ⚡ Performance & Reliability\n"
-              for perf in performance:
-                  release_notes += f"- {perf}\n"
-          
-          if docs:
-              release_notes += "\n### 📚 Documentation & Maintenance\n"
-              for doc in docs:
-                  release_notes += f"- {doc}\n"
-          
-          if other:
-              release_notes += "\n### 🔧 Other Changes\n"
-              for change in other:
-                  release_notes += f"- {change}\n"
-          
-          release_notes += f"""
-          
-          ### 🏠 Home Assistant Integration Benefits
-          - **Local Control**: No cloud dependencies for device management
-          - **Real-time Monitoring**: Live status updates and device health
-          - **Automation Ready**: Full integration with HA automations
-          - **Reliability Focus**: Robust BLE connection management
-          
-          ### 📦 Installation & Upgrade
-          
-          **Via HACS (Recommended):**
-          1. Add custom repository: `https://github.com/v1k70rk4/ha-petkit-ble`
-          2. Install "PetKit BLE Water Fountain" integration
-          3. Restart Home Assistant
-          4. Configure via Integrations page
-          
-          **Manual Installation:**
-          1. Copy `custom_components/petkit_ble` to your HA custom_components directory
-          2. Restart Home Assistant
-          3. Add integration via Configuration → Integrations
-          
-          ### 🔗 Resources
-          - **Full Changelog**: https://github.com/v1k70rk4/ha-petkit-ble/compare/${{ steps.commits.outputs.previous_tag }}...${{ steps.version.outputs.tag_name }}
-          - **Documentation**: https://github.com/v1k70rk4/ha-petkit-ble#readme
-          - **Issues & Support**: https://github.com/v1k70rk4/ha-petkit-ble/issues
-          - **HACS**: https://github.com/v1k70rk4/ha-petkit-ble
-          
-          ### 🐾 About PetKit BLE Integration
-          Control your Petkit W5 series water fountains directly through Home Assistant using Bluetooth Low Energy. Monitor battery levels, control LED settings, track filter life, and automate your pet's hydration system - all locally without cloud dependencies.
-          
-          **Supported devices**: Petkit W4/W5/CTW2 series water fountains
-          """
-          
-          # Save release notes
-          with open('enhanced_release_notes.md', 'w') as f:
-              f.write(release_notes)
-          
-          # Output for GitHub Actions
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"result<<EOF\n{release_notes}\nEOF\n")
-          
-          print("✅ Enhanced release notes generated")
-          EOF
-          
-          python enhanced_release_notes.py
-
-      - name: 🔍 Check Existing Release
-        id: check_existing
-        run: |
-          if gh release view "${{ steps.version.outputs.tag_name }}" >/dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "⚡ Release exists - will update with enhanced notes"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "✨ Creating new release with AI-generated content"
+          MANIFEST_VERSION=$(jq -r .version custom_components/petkit_ble/manifest.json)
+          if [ "$MANIFEST_VERSION" != "$VERSION" ]; then
+            echo "::error::manifest.json version is $MANIFEST_VERSION but the tag is v$VERSION. Bump the manifest (release.sh does it) before tagging."
+            exit 1
           fi
-          
-          # Log latest release decision  
-          if [[ "${{ steps.version.outputs.is_prerelease }}" == "false" ]]; then
-            echo "🥇 Stable release - will mark as latest"
-          else
-            echo "🧪 Pre-release - will not mark as latest"
-          fi
+
+      - name: Create release if it does not exist yet
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: 🚀 Create or Update GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ steps.version.outputs.tag_name }}
-          name: "${{ steps.version.outputs.tag_name }} - PetKit BLE Integration Release"
-          body: ${{ steps.openai_release.outputs.result || steps.enhanced_notes.outputs.result }}
-          prerelease: ${{ steps.version.outputs.is_prerelease }}
-          makeLatest: ${{ steps.version.outputs.is_prerelease == 'false' }}
-          generateReleaseNotes: false
-          allowUpdates: true
-          updateOnlyUnreleased: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 📢 Release Summary
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
         run: |
-          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Tag**: ${{ steps.version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Commits**: ${{ steps.commits.outputs.commits_count }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Files Changed**: ${{ steps.commits.outputs.files_changed }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Pre-release**: ${{ steps.version.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🔗 **Release URL**: https://github.com/v1k70rk4/ha-petkit-ble/releases/tag/${{ steps.version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          # Capture only stderr: proceed to create solely when the release is
+          # missing; any other lookup failure (auth, network) fails the step.
+          if VIEW_ERR=$(gh release view "$GITHUB_REF_NAME" 2>&1 >/dev/null); then
+            echo "Release $GITHUB_REF_NAME already exists; leaving it untouched."
+            exit 0
+          elif ! grep -qi "release not found" <<<"$VIEW_ERR"; then
+            echo "::error::Could not check for an existing release: $VIEW_ERR"
+            exit 1
+          fi
+          FLAGS=(--verify-tag --generate-notes --title "$GITHUB_REF_NAME")
+          if [ "$PRERELEASE" = "true" ]; then
+            FLAGS+=(--prerelease --latest=false)
+          fi
+          if ! gh release create "$GITHUB_REF_NAME" "${FLAGS[@]}"; then
+            # Someone may have created it by hand in the meantime; that is the
+            # intended end state. Any other failure still fails the job.
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              echo "Release $GITHUB_REF_NAME was created concurrently; leaving it untouched."
+              exit 0
+            fi
+            exit 1
+          fi

@@ -29,17 +29,25 @@ class EventHandlers:
 
     async def handle_notification(self, sender, message):
         parsed_data = Utils.parse_bytearray(message)
+        if parsed_data is None:
+            self.logger.debug("Ignoring malformed notification (%d bytes)", len(message or b""))
+            return None
         cmd = parsed_data['cmd']
         self.logger.debug(f"Received command {cmd}")
         
-        self.logger.debug(f"Parsed data:\n{parsed_data}")
-        
+        # CMD 213 carries the device id that the BLE auth secret is derived
+        # from, so its payload is never logged.
+        sensitive = cmd == 213
+        if not sensitive:
+            self.logger.debug(f"Parsed data:\n{parsed_data}")
+
         data = None
-        
+
         if cmd in self.handlers:
             handler = self.handlers[cmd]
             data = handler(parsed_data['data'], self._parser_context())
-            self.logger.debug(f"Parsed data\n{data}")
+            if not sensitive:
+                self.logger.debug(f"Parsed data\n{data}")
 
             if isinstance(data, dict) and "error" in data:
                 self.logger.warning(f"Skipping command {cmd}: {data['error']}")
@@ -47,7 +55,7 @@ class EventHandlers:
 
             # Update info (firmware, identifiers, sync)
             if cmd in [86, 200, 213]:
-                self.logger.info(f"Updating device info with command {cmd}: {data}")
+                self.logger.info(f"Updating device info with command {cmd}")
                 self.device.info = data
                 self.logger.info(f"Device info after update: firmware={self.device.firmware}, serial={self.device.serial}")
 

@@ -7,7 +7,9 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.service import async_register_admin_service
 
 from .const import DOMAIN
 from .coordinator import PetkitBLECoordinator
@@ -28,10 +30,19 @@ PLATFORMS: list[Platform] = [
 SERVICE_RESET_FILTER = "reset_filter"
 SERVICE_SET_DEVICE_CONFIG = "set_device_config"
 
-SERVICE_RESET_FILTER_SCHEMA = vol.Schema({}, extra=vol.ALLOW_EXTRA)
+ATTR_DEVICE_ID = "device_id"
+DEVICE_IDS = vol.All(cv.ensure_list, [cv.string], vol.Length(min=1))
+
+# A device target is mandatory: these services change device settings, so an
+# empty target must never fall through to "every fountain".
+SERVICE_RESET_FILTER_SCHEMA = vol.Schema(
+    {vol.Required(ATTR_DEVICE_ID): DEVICE_IDS},
+    extra=vol.ALLOW_EXTRA,
+)
 
 SERVICE_SET_DEVICE_CONFIG_SCHEMA = vol.Schema(
     {
+        vol.Required(ATTR_DEVICE_ID): DEVICE_IDS,
         vol.Optional("smart_time_on"): cv.positive_int,
         vol.Optional("smart_time_off"): cv.positive_int,
         vol.Optional("led_brightness"): vol.All(
@@ -48,23 +59,27 @@ SERVICE_SET_DEVICE_CONFIG_SCHEMA = vol.Schema(
 def _get_coordinators_from_service_call(
     hass: HomeAssistant, call: ServiceCall
 ) -> list[PetkitBLECoordinator]:
-    """Resolve target device_ids to coordinators."""
-    device_ids = call.data.get("device_id", [])
-    if isinstance(device_ids, str):
-        device_ids = [device_ids]
+    """Resolve target device_ids to coordinators.
 
-    if not device_ids:
-        return list(hass.data[DOMAIN].values())
-
+    Every targeted device must belong to a loaded entry of this integration;
+    otherwise the call is rejected before anything is changed.
+    """
     dev_reg = dr.async_get(hass)
+    entries = hass.data.get(DOMAIN, {})
     coordinators: list[PetkitBLECoordinator] = []
-    for device_id in device_ids:
+    for device_id in call.data[ATTR_DEVICE_ID]:
         device_entry = dev_reg.async_get(device_id)
-        if not device_entry:
-            continue
-        for entry_id in device_entry.config_entries:
-            if entry_id in hass.data[DOMAIN]:
-                coordinators.append(hass.data[DOMAIN][entry_id])
+        matches = [
+            entries[entry_id]
+            for entry_id in (device_entry.config_entries if device_entry else ())
+            if entry_id in entries
+        ]
+        if not matches:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="device_not_found",
+            )
+        coordinators.extend(c for c in matches if c not in coordinators)
     return coordinators
 
 
@@ -122,14 +137,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await coord.async_set_device_config(config_data)
             await coord.async_request_refresh()
 
-    hass.services.async_register(
+    # Admin-only: these services change device settings directly, so a
+    # restricted (non-admin) Home Assistant user must not be able to call them.
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_RESET_FILTER,
         handle_reset_filter,
         schema=SERVICE_RESET_FILTER_SCHEMA,
     )
 
-    hass.services.async_register(
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_SET_DEVICE_CONFIG,
         handle_set_device_config,

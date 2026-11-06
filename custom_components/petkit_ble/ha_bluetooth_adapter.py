@@ -327,13 +327,26 @@ class HABluetoothAdapter:
     async def _on_notification(self, sender, data):
         """Handle incoming BLE notification."""
         self._touch()
-        self._last_notification = time.monotonic()
-        self.logger.debug(f"📨 Notification from {sender}: {data.hex() if data else 'None'}")
-        if self.event_handler:
-            try:
-                await self.event_handler.handle_notification(sender, data)
-            except Exception as err:
-                self.logger.error(f"Error processing notification: {err}")
+        # CMD 213 (0xD5) replies carry the device id the auth secret is
+        # derived from; never log their raw bytes.
+        if data and len(data) > 3 and data[3] == 0xD5:
+            shown = f"<CMD 213, {len(data)} bytes redacted>"
+        else:
+            shown = data.hex() if data else "None"
+        self.logger.debug(f"📨 Notification from {sender}: {shown}")
+        if not self.event_handler:
+            return
+        # Only a well-formed frame proves the device is alive; the handler
+        # returns None for empty or malformed notifications, which must not
+        # postpone the liveness reconnect. A handler error happens after the
+        # frame was validated, so it still counts as a sign of life.
+        try:
+            parsed = await self.event_handler.handle_notification(sender, data)
+        except Exception as err:
+            self.logger.error(f"Error processing notification: {err}")
+            parsed = True
+        if parsed is not None:
+            self._last_notification = time.monotonic()
 
     # ── Message queue ──────────────────────────────────────────────
 

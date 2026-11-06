@@ -19,7 +19,18 @@ class Utils:
 
     @staticmethod
     def parse_bytearray(byte_array: bytearray):
-        # Here, add logic to parse based on expected structure
+        """Parse a notification frame, or return None if it is malformed.
+
+        Frame layout: FA FC FD | cmd | type | seq | len | 0 | data[len] | FB
+        """
+        if (
+            not byte_array
+            or len(byte_array) < 9
+            or bytes(byte_array[:3]) != b"\xfa\xfc\xfd"
+            or byte_array[-1] != 0xFB
+            or len(byte_array) != 9 + byte_array[6]
+        ):
+            return None
         return {
             "header": byte_array[:3],
             "cmd": byte_array[3],

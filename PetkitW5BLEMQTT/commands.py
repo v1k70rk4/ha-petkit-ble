@@ -107,9 +107,6 @@ class Commands:
         device_id = Utils.pad_array(self.device.device_id_bytes, 8)
         
         data = [0, 0] + device_id + self.secret    # Placeholders
-        self.logger.debug(f"Device ID: {device_id}")
-        self.logger.debug(f"Secret: {self.secret}")
-        self.logger.debug(f"Data: {data}")
         
         bytes = Utils.build_command(seq, cmd, type, data)
         await self.ble_manager.message_producer(bytes)

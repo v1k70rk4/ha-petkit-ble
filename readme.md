@@ -39,8 +39,9 @@
 
 ## Installation
 
-> **Requires Home Assistant 2026.3.0 or newer** — the integration ships its brand
-> assets locally, which relies on the local brand-image support added in 2026.3.
+> **Requires Home Assistant 2026.8.0 or newer** — the integration ships its brand
+> assets locally (local brand images, added in 2026.3) and uses the per-config-entry
+> device registry lookups added in 2026.8.
 
 ### HACS (Recommended)
 
