@@ -1,6 +1,7 @@
 reset_filter:
   fields:
     device_id:
+      required: true
       selector:
         device:
           integration: petkit_ble
@@ -8,6 +9,7 @@ reset_filter:
 set_device_config:
   fields:
     device_id:
+      required: true
       selector:
         device:
           integration: petkit_ble

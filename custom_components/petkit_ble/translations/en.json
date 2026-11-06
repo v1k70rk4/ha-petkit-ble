@@ -213,5 +213,10 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "device_not_found": {
+      "message": "The selected device is not a loaded Petkit BLE fountain."
+    }
   }
 }

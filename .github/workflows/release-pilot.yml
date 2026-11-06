@@ -24,6 +24,12 @@ jobs:
       - name: 🏷️ Extract Version Information
         id: version
         run: |
+          # Only a plain version tag may pass: the tag name is reused in later
+          # shell and Python steps, so it must never carry shell or quote syntax.
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Refusing to release from an unexpected tag name"
+            exit 1
+          fi
           TAG=${GITHUB_REF#refs/tags/}
           VERSION=${TAG#v}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
@@ -40,7 +46,7 @@ jobs:
         id: changes
         run: |
           # Get previous tag
-          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ steps.version.outputs.tag }}$" | head -1)
+          PREV_TAG=$(git tag --sort=-version:refname | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || true; } | grep -v "^${{ steps.version.outputs.tag }}$" | head -1)
           echo "previous_tag=$PREV_TAG" >> $GITHUB_OUTPUT
           
           if [ -n "$PREV_TAG" ]; then

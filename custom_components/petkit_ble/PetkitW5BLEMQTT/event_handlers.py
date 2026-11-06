@@ -29,6 +29,9 @@ class EventHandlers:
 
     async def handle_notification(self, sender, message):
         parsed_data = Utils.parse_bytearray(message)
+        if parsed_data is None:
+            self.logger.debug("Ignoring malformed notification (%d bytes)", len(message or b""))
+            return None
         cmd = parsed_data['cmd']
         self.logger.debug(f"Received command {cmd}")
         

@@ -213,5 +213,10 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "device_not_found": {
+      "message": "A kiválasztott eszköz nem betöltött Petkit BLE itató."
+    }
   }
 }
