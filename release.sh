@@ -1,411 +1,167 @@
 #!/bin/bash
 
-# Release script for PetKit BLE Integration
-# Automatically handles git operations and version tagging
-# Usage: ./release.sh [version|major|minor|patch] [commit message]
+# Release script for PetKit BLE Integration.
+#
+# main only takes changes through pull requests, so a release has two steps:
+#
+#   ./release.sh [patch|minor|major|X.Y.Z]   open a release pull request that
+#                                            bumps manifest.json
+#   ./release.sh --tag                       after that pull request is merged,
+#                                            tag main; the Release workflow
+#                                            creates the GitHub release
+#
+# Needs git and the GitHub CLI (gh), signed in.
 
 set -e
 
-# Colors for output (define early)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Configuration
+MANIFEST="custom_components/petkit_ble/manifest.json"
 DRY_RUN=false
 AUTO_YES=false
+TAG_MODE=false
+VERSION_TYPE="patch"
 
-# Helper function for error messages
 show_error() {
     echo -e "${RED}❌ Error: $1${NC}" >&2
-    if [ "$2" != "" ]; then
-        echo -e "${YELLOW}💡 Suggestion: $2${NC}" >&2
+    if [ -n "$2" ]; then
+        echo -e "${YELLOW}💡 $2${NC}" >&2
+    fi
+}
+show_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
+show_success() { echo -e "${GREEN}✅ $1${NC}"; }
+
+show_usage() {
+    cat <<EOF
+PetKit BLE release script
+
+Usage:
+  $0 [OPTIONS] [patch|minor|major|X.Y.Z]   Open a release pull request (default: patch)
+  $0 [OPTIONS] --tag                       Tag main after the release pull request is merged
+
+Options:
+  --dry-run, -n   Show what would be done without changing anything
+  --yes, -y       Do not ask for confirmation
+  --help, -h      Show this help
+
+A version with a suffix (1.3.0-beta.1) becomes a pre-release.
+EOF
+}
+
+run() {
+    if [ "$DRY_RUN" = true ]; then
+        echo "[DRY RUN] $*"
+    else
+        "$@"
     fi
 }
 
-# Helper function for warnings
-show_warning() {
-    echo -e "${YELLOW}⚠️  Warning: $1${NC}" >&2
+confirm() {
+    if [ "$AUTO_YES" = true ] || [ "$DRY_RUN" = true ]; then
+        return 0
+    fi
+    read -r -p "$1 [y/N] " answer
+    [[ "$answer" =~ ^[Yy]$ ]]
 }
 
-# Helper function for info messages
-show_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
-}
-
-# Helper function for success messages
-show_success() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-# Function to display usage
-show_usage() {
-    echo -e "${CYAN}📦 PetKit BLE Release Script${NC}"
-    echo "Automated version management and release creation for PetKit BLE integration"
-    echo ""
-    echo -e "${YELLOW}Usage:${NC} $0 [OPTIONS] [VERSION_TYPE] [COMMIT_MESSAGE]"
-    echo ""
-    echo -e "${YELLOW}Options:${NC}"
-    echo "  --help, -h     Show this help message and exit"
-    echo "  --dry-run, -n  Show what would be done without executing"
-    echo "  --yes, -y      Skip confirmation prompts (auto-confirm)"
-    echo ""
-    echo -e "${YELLOW}Version Types:${NC}"
-    echo "  patch          Increment patch version (0.0.x) - Bug fixes [DEFAULT]"
-    echo "  minor          Increment minor version (0.x.0) - New features"
-    echo "  major          Increment major version (x.0.0) - Breaking changes"
-    echo "  x.y.z          Set specific version (e.g., 1.2.3 or v1.2.3)"
-    echo ""
-    echo -e "${YELLOW}Examples:${NC}"
-    echo -e "${GREEN}Basic Usage:${NC}"
-    echo "  $0                                    # Increment patch version (interactive)"
-    echo "  $0 minor                              # Increment minor version (interactive)"
-    echo ""
-    echo -e "${GREEN}Automated Usage (no prompts):${NC}"
-    echo "  $0 -y                                 # Quick patch release"
-    echo "  $0 -y minor \"Add device support\"     # Minor release with message"
-    echo "  $0 --yes major \"Breaking changes\"    # Major release with message"
-    echo ""
-    echo -e "${GREEN}Testing (dry run):${NC}"
-    echo "  $0 --dry-run minor                    # Test minor increment"
-    echo "  $0 -n -y v2.1.0                      # Test specific version"
-    echo ""
-    echo -e "${GREEN}Custom Versions:${NC}"
-    echo "  $0 -y v1.0.0 \"First stable release\"  # Set specific version"
-    echo "  $0 -y 2.1.0                          # Version without 'v' prefix"
-    echo ""
-    echo -e "${YELLOW}What the script does:${NC}"
-    echo "  1. 🔍 Checks for remote updates and pulls if needed"
-    echo "  2. 📦 Sets manifest.json version and stages all uncommitted changes"
-    echo "  3. 📝 Creates commit with semantic versioning message"
-    echo "  4. 🚀 Pushes commits and creates version tag"
-    echo "  5. 🤖 Triggers the GitHub release workflow"
-    echo ""
-    echo -e "${BLUE}💡 Note:${NC} The script sets the manifest.json version before committing;"
-    echo "   the workflow only checks that it matches the tag."
-}
-
-# Parse flags
-while [[ $1 == --* ]] || [[ $1 == -* ]]; do
-    case $1 in
-        --dry-run|-n)
-            DRY_RUN=true
-            shift
-            ;;
-        --yes|-y)
-            AUTO_YES=true
-            shift
-            ;;
-        --help|-h)
-            show_usage
-            exit 0
-            ;;
-        *)
-            show_error "Unknown flag: $1" "Use --help to see available options"
-            exit 1
-            ;;
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run|-n) DRY_RUN=true ;;
+        --yes|-y) AUTO_YES=true ;;
+        --tag) TAG_MODE=true ;;
+        --help|-h) show_usage; exit 0 ;;
+        -*) show_error "Unknown flag: $1" "Use --help to see the options"; exit 1 ;;
+        *) VERSION_TYPE="$1" ;;
     esac
+    shift
 done
 
-# Function to get current version from manifest
-get_current_version() {
-    if [ -f "custom_components/petkit_ble/manifest.json" ]; then
-        python3 -c "import json; print(json.load(open('custom_components/petkit_ble/manifest.json'))['version'])"
-    else
-        echo "0.0.0"
-    fi
-}
-
-# Function to increment version
-increment_version() {
-    local version=$1
-    local increment_type=$2
-    
-    # Split version into parts
-    IFS='.' read -r major minor patch <<< "$version"
-    
-    case $increment_type in
-        major)
-            major=$((major + 1))
-            minor=0
-            patch=0
-            ;;
-        minor)
-            minor=$((minor + 1))
-            patch=0
-            ;;
-        patch)
-            patch=$((patch + 1))
-            ;;
-    esac
-    
-    echo "$major.$minor.$patch"
-}
-
-# Function to generate commit message
-generate_commit_message() {
-    local changes=""
-    
-    # Check for different types of changes
-    if git diff --cached --name-only | grep -q "custom_components/petkit_ble/.*\.py$"; then
-        if git diff --cached | grep -q "feat:"; then
-            changes="features"
-        elif git diff --cached | grep -q "fix:"; then
-            changes="fixes"
-        else
-            changes="improvements"
-        fi
-    fi
-    
-    if git diff --cached --name-only | grep -q "\.github/"; then
-        if [ -n "$changes" ]; then
-            changes="$changes and CI/CD updates"
-        else
-            changes="CI/CD updates"
-        fi
-    fi
-    
-    if git diff --cached --name-only | grep -q "\.md$"; then
-        if [ -n "$changes" ]; then
-            changes="$changes and documentation"
-        else
-            changes="documentation updates"
-        fi
-    fi
-    
-    if [ -z "$changes" ]; then
-        changes="updates"
-    fi
-    
-    echo "Release with $changes"
-}
-
-# Check if we're in a git repository
-if ! git rev-parse --git-dir > /dev/null 2>&1; then
-    show_error "Not in a git repository" "Run 'git init' or navigate to a git repository"
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+    show_error "Not in a git repository"
+    exit 1
+fi
+if ! command -v gh >/dev/null 2>&1; then
+    show_error "The GitHub CLI (gh) is not installed" "https://cli.github.com/"
+    exit 1
+fi
+if [ -n "$(git status --porcelain)" ]; then
+    show_error "The working tree has uncommitted changes" "Commit or stash them first; a release only changes manifest.json"
     exit 1
 fi
 
-# Check if git is configured
-if ! git config --get user.name > /dev/null || ! git config --get user.email > /dev/null; then
-    show_error "Git user not configured" "Run 'git config --global user.name \"Your Name\"' and 'git config --global user.email \"your.email@example.com\"'"
-    exit 1
-fi
+get_manifest_version() {
+    python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['version'])" "$MANIFEST"
+}
 
-# Main script
-echo -e "${CYAN}🚀 PetKit BLE Release Script${NC}"
-if [ "$DRY_RUN" = true ]; then
-    echo -e "${YELLOW}(DRY RUN MODE - No changes will be made)${NC}"
-fi
-echo "==============================="
+show_info "Updating main..."
+git fetch -q origin main
+git checkout -q main
+git merge -q --ff-only origin/main
 
-# Parse arguments
-VERSION_TYPE="${1:-patch}"
-COMMIT_MESSAGE="$2"
+CURRENT_VERSION=$(get_manifest_version)
 
-# Get current version
-CURRENT_VERSION=$(get_current_version)
-show_info "Current version: $CURRENT_VERSION"
-
-# Determine new version
-if [[ $VERSION_TYPE =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    # Specific version provided
-    NEW_VERSION=$(echo $VERSION_TYPE | sed 's/^v//')
-    show_info "Setting specific version: $NEW_VERSION"
-else
-    # Increment version
-    case $VERSION_TYPE in
-        major|minor|patch)
-            NEW_VERSION=$(increment_version $CURRENT_VERSION $VERSION_TYPE)
-            show_info "Incrementing $VERSION_TYPE version: $CURRENT_VERSION → $NEW_VERSION"
-            ;;
-        *)
-            show_error "Invalid version type: $VERSION_TYPE" "Use 'major', 'minor', 'patch', or specify version like '1.2.3'"
-            exit 1
-            ;;
-    esac
-fi
-
-# Check for remote updates
-show_info "Checking for remote updates..."
-if [ "$DRY_RUN" != true ]; then
-    git fetch origin main
-    
-    # Check if we need to pull
-    LOCAL=$(git rev-parse @)
-    REMOTE=$(git rev-parse @{u} 2>/dev/null || echo "")
-    
-    if [ -n "$REMOTE" ] && [ "$LOCAL" != "$REMOTE" ]; then
-        show_warning "Remote changes detected. Stashing local changes and pulling..."
-        
-        # Check if there are local changes to stash
-        if ! git diff --quiet || ! git diff --cached --quiet; then
-            git stash push -m "Pre-release stash $(date)"
-            STASHED=true
-        else
-            STASHED=false
-        fi
-        
-        git pull origin main
-        
-        # Restore stashed changes if any
-        if [ "$STASHED" = true ]; then
-            if git stash pop; then
-                show_success "Local changes restored successfully"
-            else
-                show_error "Failed to restore stashed changes" "Resolve conflicts manually and run the script again"
-                exit 1
-            fi
-        fi
+if [ "$TAG_MODE" = true ]; then
+    TAG="v$CURRENT_VERSION"
+    if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+        show_error "$TAG already exists on GitHub" "Open a release pull request for the next version first: $0 patch"
+        exit 1
     fi
-else
-    echo "[DRY RUN] Would check for remote updates and pull if needed"
-fi
-
-# Bump manifest.json here: the release workflow only verifies that it
-# matches the tag and never pushes to main itself.
-show_info "Setting manifest.json version to $NEW_VERSION..."
-if [ "$DRY_RUN" != true ]; then
-    PYTHONIOENCODING=utf-8 python3 .github/update-manifest-version.py "$NEW_VERSION"
-else
-    echo "[DRY RUN] Would set manifest.json version to $NEW_VERSION"
-fi
-
-# Stage all changes
-show_info "Staging all changes..."
-if [ "$DRY_RUN" != true ]; then
-    git add -A
-else
-    echo "[DRY RUN] Would stage all changes (git add -A)"
-fi
-
-# Check if there are changes to commit
-if [ "$DRY_RUN" != true ]; then
-    if git diff --cached --quiet; then
-        show_warning "No changes to commit. Creating tag only..."
-        SKIP_COMMIT=true
-    else
-        SKIP_COMMIT=false
-    fi
-else
-    echo "[DRY RUN] Would check for staged changes"
-    SKIP_COMMIT=false
-fi
-
-# Generate or use provided commit message
-if [ "$SKIP_COMMIT" != true ]; then
-    if [ -z "$COMMIT_MESSAGE" ]; then
-        COMMIT_MESSAGE=$(generate_commit_message)
-        show_info "Generated commit message: $COMMIT_MESSAGE"
-    else
-        show_info "Using provided commit message: $COMMIT_MESSAGE"
-    fi
-fi
-
-# Show summary and confirm
-echo ""
-echo -e "${YELLOW}📋 Release Summary:${NC}"
-echo "  Current Version: $CURRENT_VERSION"
-echo "  New Version: $NEW_VERSION"
-if [ "$SKIP_COMMIT" != true ]; then
-    echo "  Commit Message: $COMMIT_MESSAGE"
-else
-    echo "  Commit: Skipped (no changes)"
-fi
-echo "  Tag: v$NEW_VERSION"
-echo ""
-
-# Confirm unless auto-yes is enabled
-if [ "$AUTO_YES" != true ] && [ "$DRY_RUN" != true ]; then
-    read -p "Continue with release? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        show_info "Release cancelled by user"
+    show_info "main is at $(git rev-parse --short HEAD), manifest.json says $CURRENT_VERSION"
+    if ! confirm "Tag main as $TAG and push the tag?"; then
+        echo "Cancelled."
         exit 0
     fi
+    run git tag -a "$TAG" -m "Release $TAG"
+    run git push origin "$TAG"
+    show_success "$TAG pushed. The Release workflow creates the GitHub release in a minute or two."
+    exit 0
 fi
 
-# Create commit if there are changes
-if [ "$SKIP_COMMIT" != true ]; then
-    show_info "Creating commit..."
-    if [ "$DRY_RUN" != true ]; then
-        if git commit -m "$COMMIT_MESSAGE - v$NEW_VERSION"; then
-            show_success "Commit created successfully"
-        else
-            show_error "Failed to create commit" "Check git status and resolve any issues"
+case "$VERSION_TYPE" in
+    major|minor|patch)
+        IFS='.' read -r major minor patch <<<"${CURRENT_VERSION%%-*}"
+        case "$VERSION_TYPE" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+        esac
+        NEW_VERSION="$major.$minor.$patch"
+        ;;
+    *)
+        NEW_VERSION="${VERSION_TYPE#v}"
+        if [[ ! "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            show_error "Invalid version: $VERSION_TYPE" "Use patch, minor, major or a version like 1.2.3"
             exit 1
         fi
-    else
-        echo "[DRY RUN] Would create commit with message: '$COMMIT_MESSAGE - v$NEW_VERSION'"
-    fi
+        ;;
+esac
+
+BRANCH="release/v$NEW_VERSION"
+if git ls-remote --exit-code --tags origin "refs/tags/v$NEW_VERSION" >/dev/null 2>&1; then
+    show_error "v$NEW_VERSION is already released"
+    exit 1
 fi
 
-# Check if tag already exists and handle it
-if git tag -l "v$NEW_VERSION" | grep -q "v$NEW_VERSION"; then
-    show_warning "Tag v$NEW_VERSION already exists locally"
-    if [ "$DRY_RUN" != true ]; then
-        show_info "Deleting existing local tag v$NEW_VERSION..."
-        if git tag -d "v$NEW_VERSION"; then
-            show_success "Existing local tag deleted"
-        else
-            show_warning "Could not delete existing local tag"
-        fi
-    else
-        echo "[DRY RUN] Would delete existing local tag: v$NEW_VERSION"
-    fi
+echo "  Current version: $CURRENT_VERSION"
+echo "  New version:     $NEW_VERSION"
+echo "  Branch:          $BRANCH"
+if ! confirm "Open the release pull request?"; then
+    echo "Cancelled."
+    exit 0
 fi
 
-# Check if tag exists on remote
-if git ls-remote --tags origin | grep -q "refs/tags/v$NEW_VERSION"; then
-    show_warning "Tag v$NEW_VERSION already exists on remote"
-    if [ "$DRY_RUN" != true ]; then
-        show_info "Deleting existing remote tag v$NEW_VERSION..."
-        if git push --delete origin "v$NEW_VERSION" 2>/dev/null; then
-            show_success "Existing remote tag deleted"
-        else
-            show_warning "Could not delete existing remote tag (may not have existed)"
-        fi
-    else
-        echo "[DRY RUN] Would delete existing remote tag: v$NEW_VERSION"
-    fi
-fi
+run git checkout -q -b "$BRANCH"
+run env PYTHONIOENCODING=utf-8 python3 .github/update-manifest-version.py "$NEW_VERSION"
+run git add "$MANIFEST"
+run git commit -q -m "chore: release v$NEW_VERSION"
+run git push -q -u origin "$BRANCH"
+run gh pr create --base main --head "$BRANCH" \
+    --title "Release v$NEW_VERSION" \
+    --body "Bumps \`manifest.json\` to $NEW_VERSION. After it is merged, run \`./release.sh --tag\` to tag main; the Release workflow then creates the GitHub release."
+run git checkout -q main
 
-# Create tag
-show_info "Creating tag v$NEW_VERSION..."
-if [ "$DRY_RUN" != true ]; then
-    if git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"; then
-        show_success "Tag v$NEW_VERSION created successfully"
-    else
-        show_error "Failed to create tag after cleanup"
-        exit 1
-    fi
-else
-    echo "[DRY RUN] Would create tag: v$NEW_VERSION"
-fi
-
-# Push commits and tags
-show_info "Pushing to remote..."
-if [ "$DRY_RUN" != true ]; then
-    if git push origin main && git push origin "v$NEW_VERSION"; then
-        show_success "Successfully pushed commits and tag to remote"
-    else
-        show_error "Failed to push to remote" "Check network connection and repository permissions"
-        exit 1
-    fi
-else
-    echo "[DRY RUN] Would push commits and tag to remote"
-fi
-
-# Success message
-echo ""
-echo -e "${GREEN}🎉 Release v$NEW_VERSION completed successfully!${NC}"
-echo ""
-echo -e "${BLUE}📋 What happens next:${NC}"
-echo "  1. ✅ Commits and tag pushed to GitHub"
-echo "  2. 📦 GitHub release will be created automatically (if it does not exist yet)"
-echo "  3. 🔗 Release URL: https://github.com/v1k70rk4/ha-petkit-ble/releases/tag/v$NEW_VERSION"
-echo ""
-echo -e "${YELLOW}⏱️  The GitHub workflow typically takes 1-2 minutes to complete.${NC}"
+show_success "Release pull request opened. Once it is merged: $0 --tag"
