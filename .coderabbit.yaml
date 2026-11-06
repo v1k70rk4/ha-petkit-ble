@@ -1,0 +1,18 @@
+# CodeRabbit configuration — https://docs.coderabbit.ai/reference/configuration
+# Docstring coverage check disabled; docstrings are kept where Home Assistant
+# conventions expect them (setup functions, entity classes).
+reviews:
+  # Approve the pull request once every CodeRabbit comment on it is resolved (and request
+  # changes while some are open), so the review counts toward the required approval.
+  request_changes_workflow: true
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  finishing_touches:
+    docstrings:
+      enabled: false
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - ".github/copilot-instructions.md"
