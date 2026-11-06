@@ -10,9 +10,10 @@ from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth.active_update_processor import ActiveBluetoothProcessorCoordinator
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .const import CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+from .const import CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN
 from .ha_bluetooth_adapter import HABluetoothAdapter
 
 import sys
@@ -25,6 +26,9 @@ from PetkitW5BLEMQTT.commands import Commands
 from PetkitW5BLEMQTT.constants import Constants
 
 _LOGGER = logging.getLogger(__name__)
+
+# Placeholder serial used until the device answers CMD 213.
+FALLBACK_SERIAL_PREFIX = "PETKIT_"
 
 
 class PetkitBLEData:
@@ -180,12 +184,17 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 await self.commands.init_device()
                 await asyncio.sleep(1.5)
 
+            # The device only answers CMD 213 (device id + serial) once the
+            # session is authenticated, so ask again after CMD 73.
+            await self.commands.get_device_details()
+            await asyncio.sleep(1.0)
+
             await self.commands.get_device_info()
             await asyncio.sleep(0.75)
 
             # Fill in defaults for any uninitialized fields
             if self.device.serial == "Uninitialized":
-                self.device.serial = f"PETKIT_{self.address.replace(':', '')[-6:]}"
+                self.device.serial = f"{FALLBACK_SERIAL_PREFIX}{self.address.replace(':', '')[-6:]}"
             if self.device.name == "Uninitialized":
                 self.device.name = "Water Fountain"
                 self.device.name_readable = "Water Fountain"
@@ -196,6 +205,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
             self._initialized = True
             _LOGGER.info(f"Device ready: {self.device.name_readable} ({self.device.serial})")
+            self._sync_device_registry()
 
             self.async_update_listeners()
 
@@ -254,6 +264,34 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
         self._reconnect_task = asyncio.create_task(_run())
 
+    def _sync_device_registry(self) -> None:
+        """Push the reported serial and firmware into the device registry.
+
+        Entity device_info is only read when the entities are added, which is
+        before the device has answered, so the registry would otherwise keep
+        an empty serial and "Unknown" firmware forever.
+        """
+        dev_reg = dr.async_get(self.hass)
+        entry = dev_reg.async_get_device_by_identifier(
+            (DOMAIN, self.address), self.entry.entry_id
+        )
+        if entry is None:
+            return
+        changes: dict[str, str] = {}
+        if self._serial_known() and entry.serial_number != self.device.serial:
+            changes["serial_number"] = self.device.serial
+        if self.device.firmware and entry.sw_version != str(self.device.firmware):
+            changes["sw_version"] = str(self.device.firmware)
+        if changes:
+            dev_reg.async_update_device(entry.id, **changes)
+
+    def _serial_known(self) -> bool:
+        """Return True once the device has reported its real serial (CMD 213)."""
+        serial = self.device.serial
+        return bool(serial) and serial != "Uninitialized" and not str(
+            serial
+        ).startswith(FALLBACK_SERIAL_PREFIX)
+
     async def _reinit_device(self) -> None:
         """Re-authenticate after a reconnect in case the device rebooted.
 
@@ -269,6 +307,10 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 _LOGGER.info("Device re-initialised after reconnect (was power-cycled)")
                 await self.commands.init_device()
                 await asyncio.sleep(1.0)
+                # The serial is only answered after CMD 73.
+                if not self._serial_known():
+                    await self.commands.get_device_details()
+                    await asyncio.sleep(1.0)
         except Exception as err:
             _LOGGER.warning(f"Re-init after reconnect failed: {err}")
 
@@ -293,6 +335,11 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         # handshake was interrupted (e.g. a flapping connection), re-fetch it
         # here until firmware is known, so it self-heals without a reload.
         if not self.device.firmware:
+            await self.commands.get_device_info()
+            await asyncio.sleep(0.4)
+        # The device clears its id after CMD 73, so the serial (not device_id)
+        # tells whether CMD 213 has been answered.
+        if not self._serial_known():
             await self.commands.get_device_details()
             await asyncio.sleep(0.4)
 
@@ -322,6 +369,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             await asyncio.sleep(0.2)
 
         self.async_update_listeners()
+        self._sync_device_registry()
         _LOGGER.debug("Poll complete")
 
     # ── Public actions ─────────────────────────────────────────────
