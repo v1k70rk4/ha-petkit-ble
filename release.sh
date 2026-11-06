@@ -171,6 +171,7 @@ if ! confirm "Open the release pull request?"; then
     exit 0
 fi
 
+BRANCH_CREATED=false
 PUSH_STARTED=false
 PUSHED=false
 # If anything below fails, go back to a clean main instead of leaving the
@@ -193,6 +194,8 @@ cleanup_on_error() {
     if [ "$remote_status" -eq 0 ]; then
         echo -e "${YELLOW}💡 $BRANCH is already on GitHub. Open its pull request by hand:" >&2
         echo -e "   gh pr create --base main --head $BRANCH${NC}" >&2
+    elif [ "$BRANCH_CREATED" != true ]; then
+        :  # failed before this run created $BRANCH; leave any such branch alone
     elif [ "$remote_status" -eq 2 ]; then
         git branch -q -D "$BRANCH" 2>/dev/null
         echo -e "${YELLOW}💡 Nothing was pushed; the local $BRANCH branch was removed.${NC}" >&2
@@ -207,6 +210,7 @@ if [ "$DRY_RUN" = false ]; then
 fi
 
 run git checkout -q -b "$BRANCH"
+BRANCH_CREATED=true
 run env PYTHONIOENCODING=utf-8 python3 .github/update-manifest-version.py "$NEW_VERSION"
 if [ "$DRY_RUN" = false ]; then
     OTHER_CHANGES=$(git status --porcelain -- . ":!$MANIFEST")
