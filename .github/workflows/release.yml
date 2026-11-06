@@ -52,9 +52,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRERELEASE: ${{ steps.tag.outputs.prerelease }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+          # Capture only stderr: proceed to create solely when the release is
+          # missing; any other lookup failure (auth, network) fails the step.
+          if VIEW_ERR=$(gh release view "$GITHUB_REF_NAME" 2>&1 >/dev/null); then
             echo "Release $GITHUB_REF_NAME already exists; leaving it untouched."
             exit 0
+          elif ! grep -qi "release not found" <<<"$VIEW_ERR"; then
+            echo "::error::Could not check for an existing release: $VIEW_ERR"
+            exit 1
           fi
           FLAGS=(--verify-tag --generate-notes --title "$GITHUB_REF_NAME")
           if [ "$PRERELEASE" = "true" ]; then
