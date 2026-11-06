@@ -181,7 +181,10 @@ cleanup_on_error() {
     trap - ERR
     set +e
     show_error "Release pull request was not opened"
-    git checkout -q -- "$MANIFEST" 2>/dev/null
+    if [ "$BRANCH_CREATED" = true ]; then
+        # From HEAD: resets a staged-but-uncommitted bump in the index too.
+        git checkout -q HEAD -- "$MANIFEST" 2>/dev/null
+    fi
     git checkout -q main
     remote_status=2
     if [ "$PUSHED" = true ]; then
