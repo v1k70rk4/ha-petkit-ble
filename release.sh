@@ -216,8 +216,16 @@ if [ "$DRY_RUN" = false ]; then
     trap cleanup_on_error ERR
 fi
 
-run git checkout -q -b "$BRANCH"
-BRANCH_CREATED=true
+# A failing post-checkout hook can fail the command after the branch was
+# created and checked out; it did not exist before, so it is still ours.
+checkout_status=0
+run git checkout -q -b "$BRANCH" || checkout_status=$?
+if [ "$checkout_status" -eq 0 ] || [ "$(git branch --show-current)" = "$BRANCH" ]; then
+    BRANCH_CREATED=true
+fi
+if [ "$checkout_status" -ne 0 ]; then
+    (exit "$checkout_status")
+fi
 run env PYTHONIOENCODING=utf-8 python3 .github/update-manifest-version.py "$NEW_VERSION"
 if [ "$DRY_RUN" = false ]; then
     OTHER_CHANGES=$(git status --porcelain -- . ":!$MANIFEST")
