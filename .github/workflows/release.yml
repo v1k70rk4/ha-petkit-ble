@@ -16,7 +16,7 @@ jobs:
     
     steps:
       - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Fetch all history for comprehensive changelog
       
@@ -35,7 +35,7 @@ jobs:
           fi
       
       - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: '3.x'
       
@@ -103,7 +103,7 @@ jobs:
 
       - name: 🧠 Generate AI-Powered Release Notes
         id: ai_release
-        uses: peter-murray/workflow-application-token-action@v3
+        uses: peter-murray/workflow-application-token-action@v5
         with:
           application_id: ${{ secrets.APP_ID }}
           application_private_key: ${{ secrets.APP_PRIVATE_KEY }}
