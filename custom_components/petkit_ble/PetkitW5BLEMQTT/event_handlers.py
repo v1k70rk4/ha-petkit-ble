@@ -30,7 +30,7 @@ class EventHandlers:
     async def handle_notification(self, sender, message):
         parsed_data = Utils.parse_bytearray(message)
         cmd = parsed_data['cmd']
-        self.logger.info(f"Received command {cmd}")
+        self.logger.debug(f"Received command {cmd}")
         
         self.logger.debug(f"Parsed data:\n{parsed_data}")
         
