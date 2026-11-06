@@ -13,7 +13,7 @@ This repository is a custom Home Assistant integration, distributed through HACS
 - Integration code: `custom_components/petkit_ble/`.
 - Device protocol library: `custom_components/petkit_ble/PetkitW5BLEMQTT/`. This vendored copy is the one Home Assistant loads. The top-level `PetkitW5BLEMQTT/` and `main.py` are the original standalone tool; changes for the integration belong in the vendored copy.
 - The minimum supported Home Assistant version is the `homeassistant` field in `hacs.json`. Do not suggest workarounds for older Home Assistant or Python versions.
-- There is no test suite. CI runs hassfest, HACS validation, Ruff and CodeQL.
+- There is no test suite. CI runs hassfest, HACS validation, Ruff and CodeQL, plus OpenSSF Scorecard on main.
 
 ## BLE connection handling
 

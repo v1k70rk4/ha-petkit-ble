@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
   pull_request:
+#  schedule:
+#    - cron: "0 0 * * *"
 
 permissions:
   contents: read
@@ -12,8 +14,10 @@ jobs:
   validate:
     runs-on: "ubuntu-latest"
     steps:
-      - name: Check out the repository
-        uses: "actions/checkout@v7"
-
-      - name: Run hassfest validation
-        uses: "home-assistant/actions/hassfest@master"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Home Assistant publishes hassfest on its master branch only (its one release, 1.0.0, is
+      # years old), so this is pinned to a master commit; Dependabot cannot follow a branch,
+      # move it by hand now and then.
+      - uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master 2026-09-27

@@ -282,7 +282,7 @@ reconnection flow. Set the levels back to `warning` / `info` when done.
 
 ## Contributing
 
-Contributions are welcome! Feel free to open a PR or issue.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report a bug or open a pull request, and [SECURITY.md](SECURITY.md) for reporting a security problem privately.
 
 ---
 

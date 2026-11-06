@@ -16,7 +16,7 @@ jobs:
       - name: Fetch Dependabot metadata
         id: metadata
         continue-on-error: true
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
 
       # Only a single-commit PR whose every update is a proven minor or patch
       # update is approved and auto-merged, both pinned to the validated head
