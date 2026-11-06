@@ -1,6 +1,9 @@
 {
   "domain": "petkit_ble",
   "name": "Petkit BLE Water Fountain",
+  "categories": [
+    "pets"
+  ],
   "bluetooth": [
     {
       "connectable": true
