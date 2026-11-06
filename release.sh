@@ -150,9 +150,16 @@ if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
         "Delete it if it is not needed: git branch -D $BRANCH"
     exit 1
 fi
-if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+# Exit code 2 means the branch is absent; anything else non-zero means the
+# lookup itself failed, and we must not push over a branch we could not see.
+lookup_status=0
+git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1 || lookup_status=$?
+if [ "$lookup_status" -eq 0 ]; then
     show_error "$BRANCH already exists on GitHub" \
         "Finish its pull request (gh pr create --base main --head $BRANCH), or delete it: git push origin --delete $BRANCH"
+    exit 1
+elif [ "$lookup_status" -ne 2 ]; then
+    show_error "Could not check GitHub for $BRANCH" "Check network access and gh/git authentication, then retry"
     exit 1
 fi
 
@@ -164,6 +171,7 @@ if ! confirm "Open the release pull request?"; then
     exit 0
 fi
 
+PUSH_STARTED=false
 PUSHED=false
 # If anything below fails, go back to a clean main instead of leaving the
 # operator on a half-made release branch.
@@ -174,12 +182,23 @@ cleanup_on_error() {
     show_error "Release pull request was not opened"
     git checkout -q -- "$MANIFEST" 2>/dev/null
     git checkout -q main
+    remote_status=2
     if [ "$PUSHED" = true ]; then
+        remote_status=0
+    elif [ "$PUSH_STARTED" = true ]; then
+        # A failed push may still have updated the remote; ask it.
+        git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1
+        remote_status=$?
+    fi
+    if [ "$remote_status" -eq 0 ]; then
         echo -e "${YELLOW}💡 $BRANCH is already on GitHub. Open its pull request by hand:" >&2
         echo -e "   gh pr create --base main --head $BRANCH${NC}" >&2
-    else
+    elif [ "$remote_status" -eq 2 ]; then
         git branch -q -D "$BRANCH" 2>/dev/null
         echo -e "${YELLOW}💡 Nothing was pushed; the local $BRANCH branch was removed.${NC}" >&2
+    else
+        echo -e "${YELLOW}💡 Could not tell whether $BRANCH reached GitHub; the local branch was kept." >&2
+        echo -e "   Check with: git ls-remote --heads origin $BRANCH${NC}" >&2
     fi
     exit "$status"
 }
@@ -199,6 +218,7 @@ if [ "$DRY_RUN" = false ]; then
 fi
 run git add "$MANIFEST"
 run git commit -q -m "chore: release v$NEW_VERSION"
+PUSH_STARTED=true
 run git push -q -u origin "$BRANCH"
 PUSHED=true
 run gh pr create --base main --head "$BRANCH" \
