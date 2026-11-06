@@ -300,24 +300,23 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         )
 
     async def _reinit_device(self) -> None:
-        """Re-authenticate after a reconnect in case the device rebooted.
+        """Re-authenticate after every reconnect.
 
-        get_device_details reports the device's *actual* init state: a device
-        that power-cycled comes back uninitialized and needs CMD 73 again to keep
-        the connection alive; a device that only briefly dropped reports itself
-        initialized, so init_device is skipped.
+        A power-cycled fountain forgets its CMD 73 session and drops the link a
+        few seconds later. Nothing reports that state on this path: CMD 213
+        carries no init flag and is only answered after authentication, and
+        CMD 86 is never sent. So CMD 73 is always re-sent; it is harmless on a
+        device that only briefly dropped. It is built from the device's fixed
+        id, so the cached id stays valid across reconnects.
         """
         try:
-            await self.commands.get_device_details()
+            _LOGGER.info("Re-authenticating after reconnect")
+            await self.commands.init_device()
             await asyncio.sleep(1.0)
-            if not self.device.device_initialized:
-                _LOGGER.info("Device re-initialised after reconnect (was power-cycled)")
-                await self.commands.init_device()
+            # The serial is only answered after CMD 73.
+            if not self._serial_known():
+                await self.commands.get_device_details(force=True)
                 await asyncio.sleep(1.0)
-                # The serial is only answered after CMD 73.
-                if not self._serial_known():
-                    await self.commands.get_device_details(force=True)
-                    await asyncio.sleep(1.0)
         except Exception as err:
             _LOGGER.warning(f"Re-init after reconnect failed: {err}")
 
