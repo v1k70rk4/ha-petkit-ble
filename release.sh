@@ -12,7 +12,7 @@
 #
 # Needs git and the GitHub CLI (gh), signed in.
 
-set -e
+set -eE  # -E: the ERR trap also fires inside functions
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -145,6 +145,16 @@ if git ls-remote --exit-code --tags origin "refs/tags/v$NEW_VERSION" >/dev/null 
     show_error "v$NEW_VERSION is already released"
     exit 1
 fi
+if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    show_error "A local $BRANCH branch is left over from an earlier attempt" \
+        "Delete it if it is not needed: git branch -D $BRANCH"
+    exit 1
+fi
+if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+    show_error "$BRANCH already exists on GitHub" \
+        "Finish its pull request (gh pr create --base main --head $BRANCH), or delete it: git push origin --delete $BRANCH"
+    exit 1
+fi
 
 echo "  Current version: $CURRENT_VERSION"
 echo "  New version:     $NEW_VERSION"
@@ -154,14 +164,47 @@ if ! confirm "Open the release pull request?"; then
     exit 0
 fi
 
+PUSHED=false
+# If anything below fails, go back to a clean main instead of leaving the
+# operator on a half-made release branch.
+cleanup_on_error() {
+    status=$?
+    trap - ERR
+    set +e
+    show_error "Release pull request was not opened"
+    git checkout -q -- "$MANIFEST" 2>/dev/null
+    git checkout -q main
+    if [ "$PUSHED" = true ]; then
+        echo -e "${YELLOW}💡 $BRANCH is already on GitHub. Open its pull request by hand:" >&2
+        echo -e "   gh pr create --base main --head $BRANCH${NC}" >&2
+    else
+        git branch -q -D "$BRANCH" 2>/dev/null
+        echo -e "${YELLOW}💡 Nothing was pushed; the local $BRANCH branch was removed.${NC}" >&2
+    fi
+    exit "$status"
+}
+if [ "$DRY_RUN" = false ]; then
+    trap cleanup_on_error ERR
+fi
+
 run git checkout -q -b "$BRANCH"
 run env PYTHONIOENCODING=utf-8 python3 .github/update-manifest-version.py "$NEW_VERSION"
+if [ "$DRY_RUN" = false ]; then
+    OTHER_CHANGES=$(git status --porcelain -- . ":!$MANIFEST")
+    if [ -n "$OTHER_CHANGES" ]; then
+        echo "$OTHER_CHANGES" >&2
+        show_error "Files other than manifest.json changed during the version bump"
+        false
+    fi
+fi
 run git add "$MANIFEST"
 run git commit -q -m "chore: release v$NEW_VERSION"
 run git push -q -u origin "$BRANCH"
+PUSHED=true
 run gh pr create --base main --head "$BRANCH" \
     --title "Release v$NEW_VERSION" \
     --body "Bumps \`manifest.json\` to $NEW_VERSION. After it is merged, run \`./release.sh --tag\` to tag main; the Release workflow then creates the GitHub release."
+trap - ERR
 run git checkout -q main
 
 show_success "Release pull request opened. Once it is merged: $0 --tag"
