@@ -186,7 +186,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
             # The device only answers CMD 213 (device id + serial) once the
             # session is authenticated, so ask again after CMD 73.
-            await self.commands.get_device_details()
+            await self.commands.get_device_details(force=True)
             await asyncio.sleep(1.0)
 
             await self.commands.get_device_info()
@@ -287,10 +287,12 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
     def _serial_known(self) -> bool:
         """Return True once the device has reported its real serial (CMD 213)."""
-        serial = self.device.serial
-        return bool(serial) and serial != "Uninitialized" and not str(
-            serial
-        ).startswith(FALLBACK_SERIAL_PREFIX)
+        serial = str(self.device.serial or "").strip("\x00 ")
+        return (
+            bool(serial)
+            and serial != "Uninitialized"
+            and not serial.startswith(FALLBACK_SERIAL_PREFIX)
+        )
 
     async def _reinit_device(self) -> None:
         """Re-authenticate after a reconnect in case the device rebooted.
@@ -309,7 +311,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 await asyncio.sleep(1.0)
                 # The serial is only answered after CMD 73.
                 if not self._serial_known():
-                    await self.commands.get_device_details()
+                    await self.commands.get_device_details(force=True)
                     await asyncio.sleep(1.0)
         except Exception as err:
             _LOGGER.warning(f"Re-init after reconnect failed: {err}")
@@ -340,7 +342,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         # The device clears its id after CMD 73, so the serial (not device_id)
         # tells whether CMD 213 has been answered.
         if not self._serial_known():
-            await self.commands.get_device_details()
+            await self.commands.get_device_details(force=True)
             await asyncio.sleep(0.4)
 
         # Liveness check (time-based): writes to a vanished-but-"connected"

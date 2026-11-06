@@ -200,9 +200,10 @@ class Commands:
         self.logger.info(f"Queued command: {cmd}")
         return
 
-    async def get_device_details(self):
+    async def get_device_details(self, force: bool = False):
     
-        if self.device.device_id:
+        # force=True re-asks even with a cached id, e.g. to recover the serial
+        if self.device.device_id and not force:
             return
         
         cmd = 213                           # Command for getting device details

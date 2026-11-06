@@ -33,14 +33,19 @@ class EventHandlers:
         cmd = parsed_data['cmd']
         self.logger.info(f"Received command {cmd}")
         
-        self.logger.debug(f"Parsed data:\n{parsed_data}")
+        # CMD 213 carries the device id that the BLE auth secret is derived
+        # from, so its payload is never logged.
+        sensitive = cmd == 213
+        if not sensitive:
+            self.logger.debug(f"Parsed data:\n{parsed_data}")
         
         data = None
         
         if cmd in self.handlers:
             handler = self.handlers[cmd]
             data = handler(parsed_data['data'], self._parser_context())
-            self.logger.debug(f"Parsed data\n{data}")
+            if not sensitive:
+                self.logger.debug(f"Parsed data\n{data}")
 
             if isinstance(data, dict) and "error" in data:
                 self.logger.warning(f"Skipping command {cmd}: {data['error']}")

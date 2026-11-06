@@ -60,4 +60,12 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then
             FLAGS+=(--prerelease --latest=false)
           fi
-          gh release create "$GITHUB_REF_NAME" "${FLAGS[@]}"
+          if ! gh release create "$GITHUB_REF_NAME" "${FLAGS[@]}"; then
+            # Someone may have created it by hand in the meantime; that is the
+            # intended end state. Any other failure still fails the job.
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              echo "Release $GITHUB_REF_NAME was created concurrently; leaving it untouched."
+              exit 0
+            fi
+            exit 1
+          fi
