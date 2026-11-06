@@ -107,7 +107,7 @@ CURRENT_VERSION=$(get_manifest_version)
 # With an upstream remote, gh defaults to the parent of the fork; always
 # target the repository origin points at.
 # HOST/OWNER/REPO from an https, ssh:// or scp-style (git@host:owner/repo) URL.
-REPO=$(git remote get-url origin | sed -E 's#/+$##; s#\.git$##; s#^[a-z+]+://##; s#^[^@/]+@##; s#:#/#')
+REPO=$(git remote get-url origin | sed -E 's#/+$##; s#\.git$##; s#^([a-z+]+://[^/]*):[0-9]+/#\1/#; s#^[a-z+]+://##; s#^[^@/]+@##; s#:#/#; s#^ssh\.github\.com/#github.com/#')
 if [[ ! "$REPO" =~ ^[^/]+/[^/]+/[^/]+$ ]]; then
     show_error "Cannot tell the GitHub repository from the origin remote" "Expected a URL like https://github.com/OWNER/REPO"
     exit 1
