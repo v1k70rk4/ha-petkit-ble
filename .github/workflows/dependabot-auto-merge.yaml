@@ -17,17 +17,22 @@ jobs:
         id: metadata
         uses: dependabot/fetch-metadata@v3
 
-      # Only proven minor or patch updates are merged automatically. A major or
-      # unclassified update anywhere in a group leaves the PR for manual review.
+      # Only a single-commit PR whose every update is a proven minor or patch
+      # update is merged automatically, pinned to the validated head commit.
+      # fetch-metadata only inspects the first commit, so extra commits pushed
+      # to the PR turn auto-merge off and leave it for manual review.
       - name: Approve and enable auto-merge for minor and patch updates
         env:
           DEPS: ${{ steps.metadata.outputs.updated-dependencies-json }}
+          COMMITS: ${{ github.event.pull_request.commits }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if jq -e 'length > 0 and all(.[]; .updateType == "version-update:semver-minor" or .updateType == "version-update:semver-patch")' <<<"$DEPS" >/dev/null; then
+          if [ "$COMMITS" = "1" ] && jq -e 'length > 0 and all(.[]; .updateType == "version-update:semver-minor" or .updateType == "version-update:semver-patch")' <<<"$DEPS" >/dev/null; then
             gh pr review --approve "$PR_URL"
-            gh pr merge --auto --squash "$PR_URL"
+            gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
           else
-            echo "Not every update is a minor or patch update; leaving for manual review."
+            echo "Not a single-commit minor or patch update; leaving for manual review."
+            gh pr merge --disable-auto "$PR_URL" || true
           fi
