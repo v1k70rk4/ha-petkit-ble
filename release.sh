@@ -104,6 +104,11 @@ git merge -q --ff-only origin/main
 
 CURRENT_VERSION=$(get_manifest_version)
 
+# With an upstream remote, gh defaults to the parent of the fork; always
+# target origin. gh --repo takes the remote URL as is (https, ssh, scp-style);
+# credentials embedded in an https URL are dropped so they are never printed.
+REPO=$(git remote get-url origin | sed -E 's#^(https?://)[^@/]*@#\1#')
+
 if [ "$TAG_MODE" = true ]; then
     TAG="v$CURRENT_VERSION"
     if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
@@ -156,7 +161,7 @@ lookup_status=0
 git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1 || lookup_status=$?
 if [ "$lookup_status" -eq 0 ]; then
     show_error "$BRANCH already exists on GitHub" \
-        "Finish its pull request (gh pr create --base main --head $BRANCH), or delete it: git push origin --delete $BRANCH"
+        "Finish its pull request (gh pr create --repo $REPO --base main --head $BRANCH), or delete it: git push origin --delete $BRANCH"
     exit 1
 elif [ "$lookup_status" -ne 2 ]; then
     show_error "Could not check GitHub for $BRANCH" "Check network access and gh/git authentication, then retry"
@@ -196,7 +201,7 @@ cleanup_on_error() {
     fi
     if [ "$remote_status" -eq 0 ]; then
         echo -e "${YELLOW}💡 $BRANCH is already on GitHub. Open its pull request by hand:" >&2
-        echo -e "   gh pr create --base main --head $BRANCH${NC}" >&2
+        echo -e "   gh pr create --repo $REPO --base main --head $BRANCH${NC}" >&2
     elif [ "$BRANCH_CREATED" != true ]; then
         :  # failed before this run created $BRANCH; leave any such branch alone
     elif [ "$remote_status" -eq 2 ]; then
@@ -240,7 +245,7 @@ run git commit -q -m "chore: release v$NEW_VERSION"
 PUSH_STARTED=true
 run git push -q -u origin "$BRANCH"
 PUSHED=true
-run gh pr create --base main --head "$BRANCH" \
+run gh pr create --repo "$REPO" --base main --head "$BRANCH" \
     --title "Release v$NEW_VERSION" \
     --body "Bumps \`manifest.json\` to $NEW_VERSION. After it is merged, run \`./release.sh --tag\` to tag main; the Release workflow then creates the GitHub release."
 trap - ERR
