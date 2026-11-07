@@ -105,13 +105,9 @@ git merge -q --ff-only origin/main
 CURRENT_VERSION=$(get_manifest_version)
 
 # With an upstream remote, gh defaults to the parent of the fork; always
-# target the repository origin points at.
-# HOST/OWNER/REPO from an https, ssh:// or scp-style (git@host:owner/repo) URL.
-REPO=$(git remote get-url origin | sed -E 's#/+$##; s#\.git$##; s#^([a-z+]+://[^/]*):[0-9]+/#\1/#; s#^[a-z+]+://##; s#^[^@/]+@##; s#:#/#; s#^ssh\.github\.com/#github.com/#')
-if [[ ! "$REPO" =~ ^[^/]+/[^/]+/[^/]+$ ]]; then
-    show_error "Cannot tell the GitHub repository from the origin remote" "Expected a URL like https://github.com/OWNER/REPO"
-    exit 1
-fi
+# target origin. gh --repo takes the remote URL as is (https, ssh, scp-style);
+# credentials embedded in an https URL are dropped so they are never printed.
+REPO=$(git remote get-url origin | sed -E 's#^(https?://)[^@/]*@#\1#')
 
 if [ "$TAG_MODE" = true ]; then
     TAG="v$CURRENT_VERSION"
