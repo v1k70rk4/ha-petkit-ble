@@ -447,7 +447,11 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     @property
     def config_writable(self) -> bool:
         """Return True when a CMD 221 config write is safe to send."""
-        return self.device.config_received and not self.is_ctw3
+        return (
+            self.device.config_received
+            and not self.is_ctw3
+            and bool(self.ble_manager.connected_devices.get(self.address))
+        )
 
     def _ensure_config_writable(self) -> None:
         """Refuse a config write that would send wrong or default settings."""
@@ -457,7 +461,11 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="config_write_unsupported"
             )
-        if not self.device.config_received:
+        # Without a live link the write would sit in the queue and go out after
+        # the next reconnect, before that connection's CMD 211 answer.
+        if not self.device.config_received or not self.ble_manager.connected_devices.get(
+            self.address
+        ):
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="config_not_received"
             )
