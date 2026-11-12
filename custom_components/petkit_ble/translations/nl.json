@@ -217,6 +217,18 @@
   "exceptions": {
     "device_not_found": {
       "message": "Het geselecteerde apparaat is geen geladen Petkit BLE-fontein."
+    },
+    "config_not_received": {
+      "message": "De fontein heeft zijn instellingen nog niet doorgegeven. Probeer het opnieuw zodra hij verbonden is."
+    },
+    "config_write_unsupported": {
+      "message": "Instellingen wijzigen wordt voor dit fonteinmodel nog niet ondersteund."
+    }
+  },
+  "issues": {
+    "cannot_connect_in_range": {
+      "title": "{name} is binnen bereik maar niet bereikbaar",
+      "description": "De fontein blijft via Bluetooth adverteren, maar heeft al {hours} uur geen gegevens verstuurd. Dat kan betekenen dat de Bluetooth-stack op de Home Assistant-host vastzit. Herstart de host, of koppel de Bluetooth-adapter los en sluit hem opnieuw aan. Deze melding verdwijnt vanzelf zodra de fontein weer gegevens verstuurt."
     }
   }
 }

@@ -38,6 +38,11 @@ class PetkitNumberBase(CoordinatorEntity[PetkitBLECoordinator], NumberEntity):
         """Initialize the number entity."""
         super().__init__(coordinator)
 
+    @property
+    def available(self) -> bool:
+        """Unavailable until the device config is known (and never on CTW3)."""
+        return super().available and self.coordinator.config_writable
+
     def _get_device_id(self) -> str:
         """Get device ID for unique_id generation."""
         if self.coordinator.device.serial != "Uninitialized":

@@ -119,6 +119,11 @@ class PetkitSmartModeSwitch(PetkitSwitchBase):
 class PetkitConfigSwitch(PetkitSwitchBase):
     """Base class for switches that modify device config via CMD 221."""
 
+    @property
+    def available(self) -> bool:
+        """Unavailable until the device config is known (and never on CTW3)."""
+        return super().available and self.coordinator.config_writable
+
     async def _send_config(self, **overrides) -> None:
         """Send full config with overrides, keeping everything else unchanged."""
         await self.coordinator.async_update_config(**overrides)

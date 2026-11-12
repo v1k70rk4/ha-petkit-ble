@@ -217,6 +217,18 @@
   "exceptions": {
     "device_not_found": {
       "message": "The selected device is not a loaded Petkit BLE fountain."
+    },
+    "config_not_received": {
+      "message": "The fountain has not reported its settings yet. Try again once it is connected."
+    },
+    "config_write_unsupported": {
+      "message": "Changing settings is not supported on this fountain model yet."
+    }
+  },
+  "issues": {
+    "cannot_connect_in_range": {
+      "title": "{name} is in range but cannot be reached",
+      "description": "The fountain keeps advertising over Bluetooth, but it has sent no data for {hours} hour(s). This can mean that the Bluetooth stack on the Home Assistant host is stuck. Restart the host, or unplug and replug the Bluetooth adapter. This message clears itself once the fountain sends data again."
     }
   }
 }

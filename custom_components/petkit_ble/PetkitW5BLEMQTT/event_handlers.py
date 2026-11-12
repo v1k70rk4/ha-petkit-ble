@@ -62,6 +62,10 @@ class EventHandlers:
             # Update status
             if cmd in [66, 210, 211, 230]:
                 self.device.status = data
+            # Writes resend every field, so only a complete answer (child lock
+            # byte included) makes them safe; a short one blocks them again.
+            if cmd == 211:
+                self.device.config_received = data.get("is_locked") is not None
                 
         # Previously: Device status forwarded to MQTT when cmd in [220, 221, 230]
         

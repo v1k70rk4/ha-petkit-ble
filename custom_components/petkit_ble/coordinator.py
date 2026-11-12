@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import logging
 import time
 from typing import Any
@@ -9,26 +10,30 @@ from typing import Any
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth.active_update_processor import ActiveBluetoothProcessorCoordinator
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN
 from .ha_bluetooth_adapter import HABluetoothAdapter
-
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
-
-from PetkitW5BLEMQTT.device import Device
-from PetkitW5BLEMQTT.event_handlers import EventHandlers
-from PetkitW5BLEMQTT.commands import Commands
-from PetkitW5BLEMQTT.constants import Constants
+from .PetkitW5BLEMQTT.commands import Commands
+from .PetkitW5BLEMQTT.constants import Constants
+from .PetkitW5BLEMQTT.device import Device
+from .PetkitW5BLEMQTT.event_handlers import EventHandlers
+from .PetkitW5BLEMQTT.parsers import Parsers
 
 _LOGGER = logging.getLogger(__name__)
 
 # Placeholder serial used until the device answers CMD 213.
 FALLBACK_SERIAL_PREFIX = "PETKIT_"
+
+# Raise a repair issue when the fountain keeps advertising but has sent no data
+# for this long: it is in range, so the Bluetooth stack on the host is stuck
+# (seen as bluetoothd "No matching connection for device" until a host reboot).
+UNREACHABLE_AFTER = 3600.0  # seconds
+REACHABILITY_CHECK_INTERVAL = timedelta(minutes=5)
 
 
 class PetkitBLEData:
@@ -99,8 +104,16 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         # Force a reconnect if no real data arrives for this long. Time-based so
         # detection doesn't depend on the (possibly large) poll interval.
         self._data_timeout: float = max(30.0, self.update_interval * 3)
+        # Baseline for the reachability check until the first notification.
+        self._started_at: float = time.monotonic()
+        self._issue_id = f"cannot_connect_in_range_{entry.entry_id}"
 
         entry.async_on_unload(entry.add_update_listener(self._on_options_updated))
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass, self._check_reachability, REACHABILITY_CHECK_INTERVAL
+            )
+        )
 
     # ── Lifecycle ──────────────────────────────────────────────────
 
@@ -112,7 +125,38 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
     async def async_shutdown(self) -> None:
         """Shutdown and release resources."""
+        ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
         await self._cleanup()
+
+    @callback
+    def _check_reachability(self, _now=None) -> None:
+        """Raise or clear the "in range but unreachable" repair issue.
+
+        A fountain that is off or out of range stops advertising and its
+        entities go unavailable, which needs no issue. One that keeps
+        advertising but sends no data for an hour points at the host's
+        Bluetooth stack, which only a host or adapter restart fixes.
+        """
+        last = self.ble_manager.last_notification or self._started_at
+        silent = time.monotonic() - last
+        in_range = bluetooth.async_address_present(
+            self.hass, self.address, connectable=True
+        )
+        if in_range and silent >= UNREACHABLE_AFTER:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="cannot_connect_in_range",
+                translation_placeholders={
+                    "name": self.entry.title,
+                    "hours": str(int(silent // 3600)),
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
 
     # ── Initialization ─────────────────────────────────────────────
 
@@ -191,6 +235,10 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
             await self.commands.get_device_info()
             await asyncio.sleep(0.75)
+
+            # Read the settings (CMD 211); config writes wait for this answer.
+            await self.commands.get_device_config()
+            await asyncio.sleep(0.5)
 
             # Fill in defaults for any uninitialized fields
             if self.device.serial == "Uninitialized":
@@ -336,6 +384,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         await asyncio.sleep(0.4)
         await self.commands.get_device_update()
         await asyncio.sleep(0.4)
+        # The status frames carry no child lock byte, so read the config too.
+        await self.commands.get_device_config()
+        await asyncio.sleep(0.4)
 
         # Device info (firmware/serial) is only fetched once at init. If that
         # handshake was interrupted (e.g. a flapping connection), re-fetch it
@@ -386,11 +437,46 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def async_reset_filter(self) -> None:
         await self.commands.set_reset_filter()
 
+    @property
+    def is_ctw3(self) -> bool:
+        """Return True for the CTW3 (Eversweet Max), whose config layout differs."""
+        return Parsers._is_ctw3(
+            {"device_type": self.device.device_type, "name": self.device.name}
+        )
+
+    @property
+    def config_writable(self) -> bool:
+        """Return True when a CMD 221 config write is safe to send."""
+        return (
+            self.device.config_received
+            and not self.is_ctw3
+            and bool(self.ble_manager.connected_devices.get(self.address))
+        )
+
+    def _ensure_config_writable(self) -> None:
+        """Refuse a config write that would send wrong or default settings."""
+        if self.is_ctw3:
+            # The CTW3 reports its config in a different layout (battery work
+            # and sleep times); the W4/W5 write layout would corrupt it.
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="config_write_unsupported"
+            )
+        # Without a live link the write would sit in the queue and go out after
+        # the next reconnect, before that connection's CMD 211 answer.
+        if not self.device.config_received or not self.ble_manager.connected_devices.get(
+            self.address
+        ):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="config_not_received"
+            )
+
     async def async_set_device_config(self, config_data: list) -> None:
+        self._ensure_config_writable()
         await self.commands.set_device_config(config_data)
 
     async def async_update_config(self, **overrides) -> None:
         """Update device config with overrides, keeping everything else unchanged."""
+        self._ensure_config_writable()
         config = self.device.config
         config_data = [
             overrides.get("smart_time_on", config.get("smart_time_on", 30)),
