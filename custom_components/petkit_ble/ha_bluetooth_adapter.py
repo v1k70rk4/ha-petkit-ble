@@ -159,10 +159,20 @@ class HABluetoothAdapter:
                 disconnected_callback=_on_disconnect,
             )
 
-            self.connected_devices[address] = self._client
+            # Drop commands queued for the previous link before the consumer
+            # can send them: a config write among them would overwrite settings
+            # changed while disconnected. Polls are re-queued on the next cycle.
+            dropped = 0
+            while not self.queue.empty():
+                self.queue.get_nowait()
+                self.queue.task_done()
+                dropped += 1
+            if dropped:
+                self.logger.debug("Dropped %s command(s) queued before reconnect", dropped)
             # Settings may have changed while the link was down; config writes
             # wait for a fresh CMD 211 answer on this connection.
             self.event_handler.device.config_received = False
+            self.connected_devices[address] = self._client
             self._set_status(ConnectionStatus.CONNECTED)
             self._touch()
             self.logger.info(
