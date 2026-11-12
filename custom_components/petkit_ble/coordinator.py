@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import logging
 import time
 from typing import Any
@@ -9,9 +10,10 @@ from typing import Any
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth.active_update_processor import ActiveBluetoothProcessorCoordinator
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN
@@ -26,6 +28,12 @@ _LOGGER = logging.getLogger(__name__)
 
 # Placeholder serial used until the device answers CMD 213.
 FALLBACK_SERIAL_PREFIX = "PETKIT_"
+
+# Raise a repair issue when the fountain keeps advertising but has sent no data
+# for this long: it is in range, so the Bluetooth stack on the host is stuck
+# (seen as bluetoothd "No matching connection for device" until a host reboot).
+UNREACHABLE_AFTER = 3600.0  # seconds
+REACHABILITY_CHECK_INTERVAL = timedelta(minutes=5)
 
 
 class PetkitBLEData:
@@ -96,8 +104,16 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         # Force a reconnect if no real data arrives for this long. Time-based so
         # detection doesn't depend on the (possibly large) poll interval.
         self._data_timeout: float = max(30.0, self.update_interval * 3)
+        # Baseline for the reachability check until the first notification.
+        self._started_at: float = time.monotonic()
+        self._issue_id = f"cannot_connect_in_range_{entry.entry_id}"
 
         entry.async_on_unload(entry.add_update_listener(self._on_options_updated))
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass, self._check_reachability, REACHABILITY_CHECK_INTERVAL
+            )
+        )
 
     # ── Lifecycle ──────────────────────────────────────────────────
 
@@ -109,7 +125,38 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
     async def async_shutdown(self) -> None:
         """Shutdown and release resources."""
+        ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
         await self._cleanup()
+
+    @callback
+    def _check_reachability(self, _now=None) -> None:
+        """Raise or clear the "in range but unreachable" repair issue.
+
+        A fountain that is off or out of range stops advertising and its
+        entities go unavailable, which needs no issue. One that keeps
+        advertising but sends no data for an hour points at the host's
+        Bluetooth stack, which only a host or adapter restart fixes.
+        """
+        last = self.ble_manager.last_notification or self._started_at
+        silent = time.monotonic() - last
+        in_range = bluetooth.async_address_present(
+            self.hass, self.address, connectable=True
+        )
+        if in_range and silent >= UNREACHABLE_AFTER:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="cannot_connect_in_range",
+                translation_placeholders={
+                    "name": self.entry.title,
+                    "hours": str(int(silent // 3600)),
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
 
     # ── Initialization ─────────────────────────────────────────────
 

@@ -224,5 +224,11 @@
     "config_write_unsupported": {
       "message": "Changing settings is not supported on this fountain model yet."
     }
+  },
+  "issues": {
+    "cannot_connect_in_range": {
+      "title": "{name} is in range but cannot be reached",
+      "description": "The fountain keeps advertising over Bluetooth, but no connection has worked for {hours} hour(s). This usually means the Bluetooth stack on the Home Assistant host is stuck. Restart the host, or unplug and replug the Bluetooth adapter. This message clears itself once the fountain responds again."
+    }
   }
 }
