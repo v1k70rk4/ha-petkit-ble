@@ -228,7 +228,7 @@
   "issues": {
     "cannot_connect_in_range": {
       "title": "{name} hatótávon belül van, de nem érhető el",
-      "description": "Az itató továbbra is küld Bluetooth-hirdetéseket, de {hours} órája egyetlen csatlakozás sem sikerült. Ez általában azt jelenti, hogy a Home Assistant gép Bluetooth-rétege elakadt. Indítsd újra a gépet, vagy húzd ki és dugd vissza a Bluetooth-adaptert. Ez az üzenet magától eltűnik, amint az itató újra válaszol."
+      "description": "Az itató továbbra is küld Bluetooth-hirdetéseket, de {hours} órája nem küldött adatot. Ez arra utalhat, hogy a Home Assistant gép Bluetooth-rétege elakadt. Indítsd újra a gépet, vagy húzd ki és dugd vissza a Bluetooth-adaptert. Ez az üzenet magától eltűnik, amint az itató újra küld adatot."
     }
   }
 }

@@ -228,7 +228,7 @@
   "issues": {
     "cannot_connect_in_range": {
       "title": "{name} is binnen bereik maar niet bereikbaar",
-      "description": "De fontein blijft via Bluetooth adverteren, maar al {hours} uur lukt geen enkele verbinding. Dat betekent meestal dat de Bluetooth-stack op de Home Assistant-host vastzit. Herstart de host, of koppel de Bluetooth-adapter los en sluit hem opnieuw aan. Deze melding verdwijnt vanzelf zodra de fontein weer reageert."
+      "description": "De fontein blijft via Bluetooth adverteren, maar heeft al {hours} uur geen gegevens verstuurd. Dat kan betekenen dat de Bluetooth-stack op de Home Assistant-host vastzit. Herstart de host, of koppel de Bluetooth-adapter los en sluit hem opnieuw aan. Deze melding verdwijnt vanzelf zodra de fontein weer gegevens verstuurt."
     }
   }
 }
