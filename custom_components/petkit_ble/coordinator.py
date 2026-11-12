@@ -237,7 +237,6 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             await asyncio.sleep(0.75)
 
             # Read the settings (CMD 211); config writes wait for this answer.
-            self.device.config_received = False
             await self.commands.get_device_config()
             await asyncio.sleep(0.5)
 
@@ -358,9 +357,6 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         device that only briefly dropped. It is built from the device's fixed
         id, so the cached id stays valid across reconnects.
         """
-        # Settings may have changed while the link was down (e.g. on the
-        # device itself); block writes until CMD 211 answers again.
-        self.device.config_received = False
         try:
             _LOGGER.info("Re-authenticating after reconnect")
             await self.commands.init_device()
