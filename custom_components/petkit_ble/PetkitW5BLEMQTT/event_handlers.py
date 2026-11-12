@@ -62,6 +62,8 @@ class EventHandlers:
             # Update status
             if cmd in [66, 210, 211, 230]:
                 self.device.status = data
+            if cmd == 211:
+                self.device.config_received = True
                 
         # Previously: Device status forwarded to MQTT when cmd in [220, 221, 230]
         

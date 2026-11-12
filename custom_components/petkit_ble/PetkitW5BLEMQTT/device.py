@@ -2,6 +2,9 @@
 class Device:
     def __init__(self, address):
         self.device_initialized = 0
+        # True once the device has answered CMD 211, so a config write never
+        # sends defaults in place of the real settings.
+        self.config_received = False
         self.device_id = 0
         self.device_id_bytes = []
         self.serial = "Uninitialized"

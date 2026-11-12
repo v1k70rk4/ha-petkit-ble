@@ -217,6 +217,12 @@
   "exceptions": {
     "device_not_found": {
       "message": "A kiválasztott eszköz nem betöltött Petkit BLE itató."
+    },
+    "config_not_received": {
+      "message": "Az itató még nem küldte el a beállításait. Próbáld újra, ha már csatlakozott."
+    },
+    "config_write_unsupported": {
+      "message": "Ennél az itatótípusnál a beállítások módosítása még nem támogatott."
     }
   }
 }

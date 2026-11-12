@@ -42,6 +42,11 @@ class PetkitTimeBase(CoordinatorEntity[PetkitBLECoordinator], TimeEntity):
         """Initialize the time entity."""
         super().__init__(coordinator)
 
+    @property
+    def available(self) -> bool:
+        """Unavailable until the device config is known (and never on CTW3)."""
+        return super().available and self.coordinator.config_writable
+
     def _get_device_id(self) -> str:
         if self.coordinator.device.serial != "Uninitialized":
             return self.coordinator.device.serial
