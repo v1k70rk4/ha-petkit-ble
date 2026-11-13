@@ -1,0 +1,13 @@
+# Tool settings only: the integration itself is installed by HACS from custom_components/.
+[tool.ruff.lint]
+# On top of Ruff's defaults: an asyncio task nobody keeps a reference to cannot
+# be cancelled when the config entry unloads.
+extend-select = ["RUF006"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# Let Home Assistant install its httpx alias before respx is imported.
+addopts = "-p no:respx"

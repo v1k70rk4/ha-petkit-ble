@@ -3,6 +3,19 @@
   "name": "Petkit BLE Water Fountain",
   "bluetooth": [
     {
+      "local_name": "Petkit_W4*",
+      "connectable": true
+    },
+    {
+      "local_name": "Petkit_W5*",
+      "connectable": true
+    },
+    {
+      "local_name": "Petkit_CTW2*",
+      "connectable": true
+    },
+    {
+      "local_name": "Petkit_CTW3*",
       "connectable": true
     }
   ],

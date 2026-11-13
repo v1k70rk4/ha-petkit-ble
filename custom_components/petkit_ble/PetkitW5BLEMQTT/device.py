@@ -46,8 +46,9 @@ class Device:
         self._warning_breakdown = None
         self._warning_water_missing = None
         self._warning_filter = None
-        self._pump_runtime = 0
-        self._pump_runtime_today = 0
+        # None until the device reports them, so the sensors stay unknown.
+        self._pump_runtime = None
+        self._pump_runtime_today = None
         self._pump_runtime_readable = 0
         self._pump_runtime_today_readable = 0
         self._purified_water = None
@@ -106,6 +107,8 @@ class Device:
             "mode": self._mode,
             "name_readable": self._name_readable,
             "power_status": self._power_status,
+            "pump_runtime": self._pump_runtime,
+            "pump_runtime_today": self._pump_runtime_today,
             "pump_runtime_readable": self._pump_runtime_readable,
             "pump_runtime_today_readable": self._pump_runtime_today_readable,
             "purified_water": self._purified_water,

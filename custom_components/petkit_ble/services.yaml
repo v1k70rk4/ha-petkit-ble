@@ -18,14 +18,14 @@ set_device_config:
       selector:
         number:
           min: 1
-          max: 1440
+          max: 255
           unit_of_measurement: minutes
     smart_time_off:
       example: 60
       selector:
         number:
           min: 1
-          max: 1440
+          max: 255
           unit_of_measurement: minutes
     led_brightness:
       example: 80

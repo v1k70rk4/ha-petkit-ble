@@ -20,7 +20,9 @@ class Commands:
         self.device.status = {"rssi": connectiondata['props']['RSSI']}
         
         discovered_bytes = Utils.bytes_to_unsigned_integers(Utils.combine_byte_arrays(connectiondata['props']['ServiceData']))
-        device_integer_identifier = discovered_bytes[5]
+        # Advertisement data is untrusted: a short one maps to the unknown model
+        # instead of failing every initialization attempt.
+        device_integer_identifier = discovered_bytes[5] if len(discovered_bytes) > 5 else None
 
         self.logger.debug(f"Received ServiceData {discovered_bytes}")
         
@@ -83,7 +85,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def init_device(self):
@@ -112,7 +114,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def set_datetime(self):
@@ -126,7 +128,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def get_device_sync(self):
@@ -141,7 +143,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def get_device_info(self):
@@ -155,7 +157,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
         
     async def get_device_type(self):
@@ -169,7 +171,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
         
     async def get_device_state(self):
@@ -183,7 +185,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
         
     async def get_device_config(self):
@@ -197,7 +199,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def get_device_details(self, force: bool = False):
@@ -216,7 +218,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
     
     # Not used -- maybe never
@@ -238,7 +240,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     #async def set_device_config(self, smart_time_on, smart_time_off, led_switch, led_brightness, led_light_time_on_1, led_light_time_on_2, led_light_time_off_1, led_light_time_off_2, do_not_disturb_switch, do_not_disturb_time_start_1, do_not_disturb_time_start_2, do_not_disturb_time_end_1, do_not_disturb_time_end_2, is_locked):
@@ -253,7 +255,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def set_reset_filter(self):
@@ -267,7 +269,7 @@ class Commands:
 
         self.increment_sequence()
 
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
 
@@ -290,5 +292,5 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return

@@ -22,6 +22,7 @@
     },
     "error": {
       "cannot_connect": "Nem sikerült csatlakozni az eszközhöz. Ellenőrizze, hogy az eszköz be van-e kapcsolva és hatótávolságon belül van-e.",
+      "invalid_address": "Ez nem Bluetooth-cím. A helyes forma: AA:BB:CC:DD:EE:FF.",
       "unknown": "Ismeretlen hiba történt."
     },
     "abort": {

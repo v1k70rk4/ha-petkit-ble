@@ -17,6 +17,8 @@ class Parsers:
     # Get Battery Synchronization
     @staticmethod
     def device_battery(data, alias):
+        if len(data) < 3:
+            return {"error": "Insufficient data length for battery"}
         return {
             "voltage": ((data[0] * 16 * 16) + (data[1] & 255)) / 1000.0,  # Magic borrowed from Petkit
             "battery": data[2]
@@ -30,6 +32,8 @@ class Parsers:
     # Synchronize data
     @staticmethod
     def device_synchronization(data, alias):
+        if len(data) < 1:
+            return {"error": "Insufficient data length for synchronization"}
         return {"device_initialized": data[0]}
 
     # Device Information
@@ -37,8 +41,10 @@ class Parsers:
     def device_firmware(data, alias):
         # According to the com.petkit.oversea app, the Hardware is actually [0] while firmware is [1]
         # they are however presented as v[0].[1] in the actual app
-        firmware = float(f"{data[0]}.{data[1]}")
-        return {"firmware": firmware }
+        if len(data) < 2:
+            return {"error": "Insufficient data length for firmware"}
+        # A string, not a float: as a number 1.10 would turn into 1.1.
+        return {"firmware": f"{data[0]}.{data[1]}"}
 
     # Get device state
     @staticmethod
@@ -142,6 +148,9 @@ class Parsers:
     # Get device ID and serial
     @staticmethod
     def device_identifiers(data, alias):
+        # 2 bytes of padding and the 6 byte device id; the serial follows.
+        if len(data) < 8:
+            return {"error": "Insufficient data length for device identifiers"}
         device_id_bytes, device_id = Utils.extract_device_id(data)
         serial = Utils.extract_serial_number(data)
 

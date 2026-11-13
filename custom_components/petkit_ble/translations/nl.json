@@ -22,6 +22,7 @@
     },
     "error": {
       "cannot_connect": "Kan geen verbinding maken met het apparaat. Zorg dat het aan staat en binnen bereik is.",
+      "invalid_address": "Dit is geen Bluetooth-adres. Gebruik de vorm AA:BB:CC:DD:EE:FF.",
       "unknown": "Er is een onverwachte fout opgetreden."
     },
     "abort": {

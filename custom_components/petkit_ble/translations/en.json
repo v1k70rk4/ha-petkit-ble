@@ -22,6 +22,7 @@
     },
     "error": {
       "cannot_connect": "Unable to connect to the device. Please make sure it's powered on and within range.",
+      "invalid_address": "This is not a Bluetooth address. Use the form AA:BB:CC:DD:EE:FF.",
       "unknown": "An unknown error occurred."
     },
     "abort": {

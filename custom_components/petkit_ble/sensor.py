@@ -160,28 +160,10 @@ class PetkitPumpRuntimeSensor(PetkitSensorBase):
     @property
     def native_value(self) -> float | None:
         """Return the pump runtime in hours."""
-        readable = self.coordinator.current_data.get("status", {}).get("pump_runtime_readable")
-        if readable and isinstance(readable, str):
-            # Parse "3 days, 19 hours" or "5 hours" to numeric hours
-            try:
-                total_hours = 0
-                if "day" in readable:
-                    parts = readable.split(", ")
-                    days_part = parts[0].split()[0]
-                    total_hours += int(days_part) * 24
-                    if len(parts) > 1:
-                        hours_part = parts[1].split()[0]
-                        total_hours += int(hours_part)
-                elif "hour" in readable:
-                    hours_part = readable.split()[0]
-                    total_hours = int(hours_part)
-                return round(float(total_hours), 1)
-            except (ValueError, IndexError):
-                return None
-        # Handle numeric values directly (in seconds, convert to hours)
+        # From the seconds the device reports, not from the readable text.
         raw_runtime = self.coordinator.current_data.get("status", {}).get("pump_runtime")
-        if raw_runtime is not None and isinstance(raw_runtime, (int, float)):
-            return round(float(raw_runtime) / 3600, 1)  # Convert seconds to hours
+        if isinstance(raw_runtime, (int, float)):
+            return round(raw_runtime / 3600, 1)
         return None
 
 class PetkitPumpRuntimeTodaySensor(PetkitSensorBase):

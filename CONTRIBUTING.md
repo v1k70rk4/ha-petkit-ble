@@ -17,13 +17,14 @@ Open an [issue](https://github.com/v1k70rk4/ha-petkit-ble/issues/new). For a bug
 
 1. Fork the repository and branch off `main`.
 2. Keep a pull request to one change. Say what it changes and why; for a bug, how to reproduce it.
-3. Open the pull request against `main`. CI runs Ruff, hassfest, the HACS validation and CodeQL, and it gets a review before it is merged.
+3. Open the pull request against `main`. CI runs the tests, Ruff, hassfest, the HACS validation and CodeQL, and it gets a review before it is merged.
    The first review comes from CodeRabbit, an automated reviewer. Its comments are suggestions: fix what it rightly points out, and if you don't agree with one, say why in a short reply before you resolve the thread. That way a reviewer can tell a choice from an oversight.
 
 Before you open it:
 
 - **Ruff is clean:** `ruff check custom_components/petkit_ble`, with the version pinned in `.github/workflows/ruff.yaml`.
-- **Test it on a real fountain** and say which model and firmware you used. There is no automated test suite; the device is the test.
+- **The tests pass:** `python -m pytest`, see [`tests/README.md`](tests/README.md). A bug fix comes with a test that fails without it.
+- **Test it on a real fountain** and say which model and firmware you used. The tests run without a device, so they cannot tell how a real one behaves.
 - **Mind the BLE rules** in [`.github/copilot-instructions.md`](.github/copilot-instructions.md): the fountain takes one connection at a time, and every awaited BLE call needs a timeout. They come from real failures.
 - **Changes to the device protocol** go into the vendored copy in `custom_components/petkit_ble/PetkitW5BLEMQTT/`, not the top-level `PetkitW5BLEMQTT/`.
 - **Text the user sees** goes into every file under `custom_components/petkit_ble/translations/` under the same key. If you don't speak a language, put the English text there and say so in the pull request.

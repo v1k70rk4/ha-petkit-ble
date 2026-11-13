@@ -141,12 +141,9 @@ class Utils:
     # Time functions
     @staticmethod
     def get_seconds():
-        date_format = "%Y-%m-%dT%H:%M:%S.%f%z"
-        now = datetime.utcnow().strftime(date_format) + "+0000"
-        reference_time = datetime.strptime("2000-01-01T00:00:00.000+0000", date_format)
-        current_time = datetime.strptime(now, date_format)
-        seconds = int((current_time - reference_time).total_seconds())
-        return seconds
+        """Seconds since 2000-01-01 UTC, the epoch of the device clock."""
+        reference_time = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        return int((datetime.now(timezone.utc) - reference_time).total_seconds())
 
     @staticmethod
     def get_seconds_without_timezone():
@@ -181,7 +178,10 @@ class Utils:
 
     @staticmethod
     def get_timestamp_days(timestamp):
-        return time.strftime("%-d days, %-H hours", time.gmtime(timestamp))
+        # Elapsed time, not a calendar date: strftime's day of the month would
+        # be a day ahead and start over every month.
+        days, remainder = divmod(int(timestamp), 86400)
+        return f"{days} days, {remainder // 3600} hours"
         
     @staticmethod
     def get_timestamp_hours(timestamp):

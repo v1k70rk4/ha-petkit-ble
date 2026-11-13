@@ -271,12 +271,18 @@ Reload the integration (or restart HA) afterwards, reproduce the issue, and the
 logs will show the BLE device details, the exact connection error, and the
 reconnection flow. Set the levels back to `warning` / `info` when done.
 
+> **Before you share a log:** the integration keeps the fountain's device id out
+> of its own log lines, but `bleak: debug` writes every raw Bluetooth frame,
+> that one included, next to the Bluetooth address. Leave `bleak` out if you do
+> not need it, or check the log before posting it in a public issue.
+
 ---
 
 ## Known Limitations
 
 - Device supports only one active BLE connection — the official Petkit app and this integration cannot be used simultaneously
 - CTW3-specific entities (pet detection, AC power, etc.) are disabled by default — enable them manually if your device supports them
+- The fountain's Bluetooth link is neither paired nor encrypted, so anyone in radio range can control it while nothing else holds its single connection — see [SECURITY.md](SECURITY.md#what-the-fountain-itself-does-not-protect)
 
 ---
 

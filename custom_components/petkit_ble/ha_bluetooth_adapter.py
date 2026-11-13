@@ -46,6 +46,11 @@ class HABluetoothAdapter:
         self._connection_error: str | None = None
         self._reconnect_lock = asyncio.Lock()
         self._reconnection_active = False
+        # Reconnects started from the write path. They are tracked so that an
+        # unload can cancel them; an untracked one would keep reconnecting and
+        # hold the fountain's only connection after the entry is gone.
+        self._background_tasks: set[asyncio.Task] = set()
+        self._closed = False
 
     # ── Public properties ──────────────────────────────────────────
 
@@ -79,6 +84,9 @@ class HABluetoothAdapter:
             petkit_devices: dict[str, Any] = {}
 
             for info in discovered:
+                # Looser than the discovery check on purpose: this only reads
+                # the model byte for an address that is already configured, and
+                # missing it would treat a CTW3 as a W5.
                 if info.name and any(t in info.name for t in ["W4", "W5", "CTW2", "CTW3"]):
                     service_data = info.service_data or {"default": [0, 0, 0, 0, 0, 206]}
                     mock = type('MockDevice', (), {
@@ -97,7 +105,7 @@ class HABluetoothAdapter:
 
             self.available_devices = petkit_devices
             for addr, dev in petkit_devices.items():
-                self.logger.info(f"Found device: {dev.name} ({addr})")
+                self.logger.debug("Found device: %s (%s)", dev.name, addr)
             return petkit_devices
 
         except Exception as err:
@@ -235,7 +243,7 @@ class HABluetoothAdapter:
         client = self.connected_devices.get(address)
         if not client:
             self.logger.debug("Device not connected for write, requesting reconnect")
-            asyncio.create_task(self.ensure_connected(address))
+            self._request_reconnect(address)
             return False
 
         if hasattr(client, 'is_connected') and not client.is_connected:
@@ -247,7 +255,7 @@ class HABluetoothAdapter:
                 except Exception:
                     pass
             self._set_status(ConnectionStatus.RECONNECTING)
-            asyncio.create_task(self.ensure_connected(address))
+            self._request_reconnect(address)
             return False
 
         try:
@@ -272,7 +280,7 @@ class HABluetoothAdapter:
                 except Exception:
                     pass
             self._set_status(ConnectionStatus.RECONNECTING)
-            asyncio.create_task(self.ensure_connected(address))
+            self._request_reconnect(address)
             return False
 
     # ── Notifications ──────────────────────────────────────────────
@@ -396,6 +404,34 @@ class HABluetoothAdapter:
 
     # ── Reconnection (single entry point) ──────────────────────────
 
+    def _request_reconnect(self, address: str) -> None:
+        """Start a tracked background reconnect, unless the adapter is closed."""
+        if self._closed:
+            return
+        task = self.hass.async_create_background_task(
+            self.ensure_connected(address), name=f"petkit_ble reconnect {address}"
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def async_cancel_reconnects(self) -> None:
+        """Cancel the background reconnects started from the write path."""
+        current = asyncio.current_task()
+        tasks = [
+            task
+            for task in self._background_tasks
+            if task is not current and not task.done()
+        ]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def async_close(self) -> None:
+        """Stop reconnecting for good; called when the config entry unloads."""
+        self._closed = True
+        await self.async_cancel_reconnects()
+
     async def force_reconnect(self, address: str) -> bool:
         """Tear down a stale-but-'connected' client and reconnect from scratch.
 
@@ -419,6 +455,8 @@ class HABluetoothAdapter:
         """Single entry point for reconnection. Uses a lock to prevent parallel attempts."""
         if self.connected_devices.get(address):
             return True
+        if self._closed:
+            return False
 
         if self._reconnect_lock.locked():
             # Another reconnection is already running — wait for it
@@ -434,7 +472,7 @@ class HABluetoothAdapter:
 
     async def _reconnection_loop(self, address: str) -> bool:
         """Attempt reconnection with progressive delays and periodic BLE reset."""
-        while not self.connected_devices.get(address):
+        while not self._closed and not self.connected_devices.get(address):
             if self._connection_attempts % 5 == 0 or self._connection_attempts < 3:
                 self.logger.info(f"🔁 Reconnection attempt #{self._connection_attempts + 1}")
 
@@ -472,7 +510,7 @@ class HABluetoothAdapter:
                 self.logger.debug(f"Next retry in {delay:.1f}s (attempt #{self._connection_attempts})")
             await asyncio.sleep(delay)
 
-        return True
+        return bool(self.connected_devices.get(address))
 
     async def _reset_ble_stack(self, address: str) -> None:
         """Full BLE stack reset — disconnect, discard client, re-discover device."""

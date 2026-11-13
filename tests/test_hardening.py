@@ -1,0 +1,321 @@
+"""Regression tests for the findings of the 2026-11-13 security review."""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from datetime import datetime, timezone
+from fnmatch import fnmatchcase
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+import voluptuous as vol
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import ServiceValidationError
+
+from custom_components.petkit_ble.const import (
+    DOMAIN,
+    SUPPORTED_NAME_PREFIXES,
+    is_supported_device_name,
+)
+from custom_components.petkit_ble.PetkitW5BLEMQTT.commands import Commands
+from custom_components.petkit_ble.PetkitW5BLEMQTT.device import Device
+from custom_components.petkit_ble.PetkitW5BLEMQTT.event_handlers import EventHandlers
+from custom_components.petkit_ble.PetkitW5BLEMQTT.parsers import Parsers
+from custom_components.petkit_ble.PetkitW5BLEMQTT.utils import Utils
+from custom_components.petkit_ble.sensor import PetkitPumpRuntimeSensor
+
+from .conftest import ADDRESS, frame, make_writable, registry_device_id, w5_status_payload
+
+INTEGRATION = Path(__file__).parent.parent / "custom_components" / "petkit_ble"
+LOGGER_NAME = "custom_components.petkit_ble"
+DAY = 86400
+W5 = {"alias": "W5", "device_type": 14, "name": "Petkit_W5"}
+
+
+def _reconnect_tasks() -> list[asyncio.Task]:
+    return [
+        task
+        for task in asyncio.all_tasks()
+        if not task.done() and "ensure_connected" in repr(task.get_coro())
+    ]
+
+
+async def _cancel(tasks) -> None:
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+# -- Reconnects must not outlive the config entry -----------------------------
+
+
+async def test_no_reconnect_task_survives_unload(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    with patch.object(adapter, "connect_device", AsyncMock(return_value=False)):
+        # A write while the link is down starts a background reconnect.
+        assert await adapter.write_characteristic(ADDRESS, "uuid", b"\x00") is False
+        await asyncio.sleep(0.05)
+        assert len(_reconnect_tasks()) == 1
+
+        assert await hass.config_entries.async_unload(loaded_entry.entry_id)
+        await asyncio.sleep(0.3)
+        leftovers = _reconnect_tasks()
+        try:
+            assert leftovers == []
+        finally:
+            await _cancel(leftovers)
+
+
+async def test_closed_adapter_does_not_reconnect(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    adapter.connect_device = AsyncMock(return_value=False)
+    await adapter.async_close()
+
+    assert await adapter.write_characteristic(ADDRESS, "uuid", b"\x00") is False
+    assert await adapter.ensure_connected(ADDRESS) is False
+    await asyncio.sleep(0.05)
+
+    assert _reconnect_tasks() == []
+    adapter.connect_device.assert_not_awaited()
+
+
+async def test_failed_initialization_cancels_background_reconnects(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    adapter = coordinator.ble_manager
+    with patch.object(adapter, "connect_device", AsyncMock(return_value=False)):
+        await adapter.write_characteristic(ADDRESS, "uuid", b"\x00")
+        await asyncio.sleep(0.05)
+        assert len(_reconnect_tasks()) == 1
+        await coordinator._cleanup()
+        assert _reconnect_tasks() == []
+        # Not closed: the next write may ask for a reconnect again.
+        await adapter.write_characteristic(ADDRESS, "uuid", b"\x00")
+        await asyncio.sleep(0.05)
+        assert len(_reconnect_tasks()) == 1
+
+
+# -- An absent fountain must not fill the log ---------------------------------
+
+
+async def test_unreachable_fountain_does_not_flood_the_log(hass, loaded_entry, caplog):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    coordinator.ble_manager.scan = AsyncMock(return_value={})
+    coordinator.ble_manager.connect_device = AsyncMock(return_value=False)
+    with caplog.at_level(logging.DEBUG, logger=LOGGER_NAME):
+        task = asyncio.create_task(coordinator._initialization_loop())
+        await asyncio.sleep(1.3)  # three attempts at the initial 0.5 s pace
+        await _cancel([task])
+    loud = [r for r in caplog.records if r.name.startswith(LOGGER_NAME) and r.levelno >= logging.INFO]
+    assert coordinator.ble_manager.connect_device.await_count >= 3
+    assert [r.levelno for r in loud] == [logging.WARNING]
+    assert "attempt 1 failed" in loud[0].getMessage()
+
+
+async def test_polling_commands_are_logged_at_debug_only(caplog):
+    ble = MagicMock()
+    ble.message_producer = AsyncMock()
+    commands = Commands(ble_manager=ble, device=Device(ADDRESS), logger=logging.getLogger(LOGGER_NAME))
+    with caplog.at_level(logging.DEBUG, logger=LOGGER_NAME):
+        await commands.get_battery()
+        await commands.get_device_state()
+        await commands.get_device_update()
+        await commands.get_device_config()
+    assert ble.message_producer.await_count == 4
+    assert [r for r in caplog.records if r.levelno >= logging.INFO] == []
+
+
+async def test_short_frames_are_logged_at_debug_only(caplog):
+    handlers = EventHandlers(device=Device(ADDRESS), commands=None, logger=logging.getLogger(LOGGER_NAME))
+    with caplog.at_level(logging.DEBUG, logger=LOGGER_NAME):
+        for _ in range(20):
+            await handlers.handle_notification("s", frame(210, [0] * 5))
+    assert [r for r in caplog.records if r.levelno >= logging.INFO] == []
+
+
+# -- Only a fountain is offered for setup -------------------------------------
+
+
+def test_manifest_only_matches_petkit_advertisements():
+    manifest = json.loads((INTEGRATION / "manifest.json").read_text())
+    patterns = [matcher.get("local_name") for matcher in manifest["bluetooth"]]
+    assert all(patterns), "a matcher without local_name matches every device"
+    assert all(matcher["connectable"] is True for matcher in manifest["bluetooth"])
+    assert {pattern.rstrip("*") for pattern in patterns} == set(SUPPORTED_NAME_PREFIXES)
+
+
+@pytest.mark.parametrize("model_byte", [205, 206, 213, 214, 217, 223, 228, 246, 247, 248, 249])
+def test_every_known_model_is_discovered(model_byte):
+    name = Utils.get_device_properties(model_byte)["name"]
+    manifest = json.loads((INTEGRATION / "manifest.json").read_text())
+    assert is_supported_device_name(name)
+    assert any(fnmatchcase(name, matcher["local_name"]) for matcher in manifest["bluetooth"])
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "LG-W5 Soundbar",
+        "ZW4-Tracker",
+        "MyCTW2Clone",
+        "XPetkit_W5",
+        "petkit_w5",
+        "Petkit_D4",
+        "Petkit_",
+        "Mi Smart Band",
+        "",
+        None,
+    ],
+)
+async def test_discovery_rejects_other_devices(hass, enable_bluetooth, name):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "bluetooth"},
+        data=SimpleNamespace(name=name, address="11:22:33:44:55:66"),
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "not_supported"
+
+
+@pytest.mark.parametrize("name", ["Petkit_W4X", "Petkit_W5C", "Petkit_CTW2", "Petkit_CTW3UV_100"])
+async def test_discovery_offers_a_fountain_for_confirmation(hass, enable_bluetooth, name):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "bluetooth"},
+        data=SimpleNamespace(name=name, address=ADDRESS),
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "bluetooth_confirm"
+    assert result["description_placeholders"] == {"name": name, "address": ADDRESS}
+
+
+# -- Input from the user ------------------------------------------------------
+
+
+@pytest.mark.parametrize("address", ["not a mac", "A4:C1:38:00:11", "../../etc/passwd", "", "A4-C1-38-00-11-22"])
+async def test_manual_step_rejects_an_invalid_address(hass, enable_bluetooth, address):
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    assert result["step_id"] == "manual"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"address": address})
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"address": "invalid_address"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+async def test_manual_step_accepts_and_normalizes_a_valid_address(hass, enable_bluetooth):
+    with patch("custom_components.petkit_ble.async_setup_entry", AsyncMock(return_value=True)):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"address": " a4:c1:38:00:11:22 "}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {"address": ADDRESS}
+    assert result["result"].unique_id == ADDRESS.lower()
+
+
+@pytest.mark.parametrize("field", ["smart_time_on", "smart_time_off"])
+@pytest.mark.parametrize("value", [0, 256, 300, 1440, -5])
+async def test_service_rejects_a_smart_time_that_does_not_fit_a_byte(hass, loaded_entry, field, value):
+    producer = make_writable(hass.data[DOMAIN][loaded_entry.entry_id])
+    with pytest.raises((vol.Invalid, ServiceValidationError)):
+        await hass.services.async_call(
+            DOMAIN,
+            "set_device_config",
+            {"device_id": registry_device_id(hass, loaded_entry), field: value},
+            blocking=True,
+        )
+    producer.assert_not_awaited()
+
+
+# -- Input from the fountain, or from something pretending to be one ----------
+
+
+@pytest.mark.parametrize(
+    ("cmd", "payload"),
+    [(66, [1]), (66, []), (200, [1]), (200, []), (86, []), (213, [0, 0, 1, 2]), (213, [])],
+)
+async def test_short_payloads_are_ignored(cmd, payload):
+    device = Device(ADDRESS)
+    handlers = EventHandlers(device=device, commands=None, logger=logging.getLogger("test"))
+    assert await handlers.handle_notification("s", frame(cmd, payload)) is not None
+    assert device.firmware == 0
+    assert device.serial == "Uninitialized"
+    assert device.device_id_bytes == []
+    assert device.status["battery"] is None
+
+
+def test_short_service_data_falls_back_to_an_unknown_model():
+    device = Device(ADDRESS)
+    ble = MagicMock()
+    ble.connectiondata = {
+        ADDRESS: SimpleNamespace(details={"props": {"RSSI": -60, "ServiceData": {"x": b"\x01\x02"}}})
+    }
+    Commands(ble_manager=ble, device=device, logger=logging.getLogger("test")).init_device_data()
+    assert device.product_name == "Petkit BLE Water Fountain"
+    assert device.device_type == 0
+
+
+@pytest.mark.parametrize(
+    ("model_byte", "name", "device_type"),
+    [(214, "Petkit_W4X", 14), (223, "Petkit_CTW3", 24)],
+)
+def test_service_data_selects_the_model(model_byte, name, device_type):
+    # Layout of a real advertisement: the first two bytes of the Bluetooth
+    # address serve as the 16 bit "UUID", the other four follow, then 0 and the model.
+    service_data = {
+        "0000c1a4-0000-1000-8000-00805f9b34fb": bytes([0x38, 0x00, 0x11, 0x22, 0x00, model_byte])
+    }
+    device = Device(ADDRESS)
+    ble = MagicMock()
+    ble.connectiondata = {
+        ADDRESS: SimpleNamespace(details={"props": {"RSSI": -60, "ServiceData": service_data}})
+    }
+    Commands(ble_manager=ble, device=device, logger=logging.getLogger("test")).init_device_data()
+    assert device.name == name
+    assert device.device_type == device_type
+
+
+# -- Values shown to the user -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [(0, "0 days, 0 hours"), (3 * DAY, "3 days, 0 hours"), (40 * DAY + 7200, "40 days, 2 hours"), (400 * DAY + 3599, "400 days, 0 hours")],
+)
+def test_runtime_is_formatted_as_elapsed_days(seconds, expected):
+    assert Utils.get_timestamp_days(seconds) == expected
+
+
+def _runtime_sensor(device: Device) -> PetkitPumpRuntimeSensor:
+    coordinator = MagicMock()
+    coordinator.address = ADDRESS
+    coordinator.device = device
+    coordinator.current_data = {"status": device.status}
+    return PetkitPumpRuntimeSensor(coordinator)
+
+
+@pytest.mark.parametrize(("seconds", "hours"), [(3 * DAY, 72.0), (40 * DAY, 960.0), (5400, 1.5), (0, 0.0)])
+def test_pump_runtime_sensor_reports_total_hours(seconds, hours):
+    device = Device(ADDRESS)
+    device.status = Parsers.device_status(bytes(w5_status_payload(pump_runtime=seconds)), W5)
+    assert _runtime_sensor(device).native_value == hours
+
+
+def test_pump_runtime_sensor_is_unknown_until_the_device_reports():
+    assert _runtime_sensor(Device(ADDRESS)).native_value is None
+
+
+@pytest.mark.parametrize(("raw", "version"), [([1, 10], "1.10"), ([1, 1], "1.1"), ([2, 0], "2.0")])
+def test_firmware_version_keeps_its_digits(raw, version):
+    assert Parsers.device_firmware(bytes(raw), None)["firmware"] == version
+
+
+def test_device_clock_counts_from_2000_utc():
+    expected = (datetime.now(timezone.utc) - datetime(2000, 1, 1, tzinfo=timezone.utc)).total_seconds()
+    assert abs(Utils.get_seconds() - expected) < 5
+    payload = Utils.time_in_bytes()
+    assert len(payload) == 6
+    assert int.from_bytes(bytes(payload[1:5]), "big") == pytest.approx(expected, abs=5)

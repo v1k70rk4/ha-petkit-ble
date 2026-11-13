@@ -35,6 +35,10 @@ FALLBACK_SERIAL_PREFIX = "PETKIT_"
 UNREACHABLE_AFTER = 3600.0  # seconds
 REACHABILITY_CHECK_INTERVAL = timedelta(minutes=5)
 
+# Failed initialization attempts are logged as a warning once, then every this
+# many attempts (about five minutes at the slowest retry pace).
+INIT_WARNING_EVERY = 60
+
 
 class PetkitBLEData:
     """Data class for Petkit BLE device."""
@@ -126,6 +130,8 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def async_shutdown(self) -> None:
         """Shutdown and release resources."""
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
+        # Close first, so nothing cancelled below can start a new reconnect.
+        await self.ble_manager.async_close()
         await self._cleanup()
 
     @callback
@@ -166,13 +172,22 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         while not self._initialized:
             try:
                 attempt += 1
-                _LOGGER.info(f"Initialization attempt {attempt}")
+                _LOGGER.debug("Initialization attempt %s", attempt)
                 await self._initialize_device()
                 if self._initialized:
                     _LOGGER.info("✅ Device initialization successful")
                     return
             except Exception as err:
-                _LOGGER.warning(f"Initialization attempt {attempt} failed: {err}")
+                # A fountain that is off or out of range fails every attempt,
+                # every few seconds, for as long as it stays away: warn on the
+                # first failure and then only now and again.
+                level = (
+                    logging.WARNING
+                    if attempt == 1 or attempt % INIT_WARNING_EVERY == 0
+                    else logging.DEBUG
+                )
+                _LOGGER.log(level, "Initialization attempt %s failed: %s", attempt, err)
+                _LOGGER.debug("Initialization failure details", exc_info=True)
 
             # Progressive delay: 0.5s → 1s → 2s → 5s
             delay = 0.5 if attempt < 5 else (1.0 if attempt < 10 else (2.0 if attempt < 20 else 5.0))
@@ -181,7 +196,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def _initialize_device(self) -> None:
         """Initialize the BLE connection and device."""
         try:
-            _LOGGER.info(f"Connecting to {self.address}")
+            _LOGGER.debug("Connecting to %s", self.address)
 
             # Discover device
             await self.ble_manager.scan()
@@ -260,11 +275,10 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             # Start the single polling loop
             self._polling_task = asyncio.create_task(self._polling_loop())
 
-        except Exception as err:
-            import traceback
-            _LOGGER.error(f"Initialization failed: {err}")
-            _LOGGER.debug("Traceback:\n%s", traceback.format_exc())
+        except Exception:
+            # The retry loop logs the failure, throttled.
             await self._cleanup()
+            raise
 
     # ── Polling ────────────────────────────────────────────────────
 
@@ -537,6 +551,8 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             if task is not current_task:
                 setattr(self, attr, None)
 
+        await self.ble_manager.async_cancel_reconnects()
+
         if self.address in self.ble_manager.connected_devices:
             await self.ble_manager.stop_notifications(self.address, Constants.READ_UUID)
             await self.ble_manager.disconnect_device(self.address)
@@ -555,7 +571,8 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         self._listeners.discard(update_callback)
 
     def async_update_listeners(self) -> None:
-        for cb in self._listeners:
+        # A copy: a listener may remove itself (or another one) while it runs.
+        for cb in list(self._listeners):
             cb()
 
     # ── Data access ────────────────────────────────────────────────

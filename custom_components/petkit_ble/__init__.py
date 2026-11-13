@@ -40,11 +40,14 @@ SERVICE_RESET_FILTER_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+# The smart mode times travel as one byte each.
+SMART_MINUTES = vol.All(vol.Coerce(int), vol.Range(min=1, max=255))
+
 SERVICE_SET_DEVICE_CONFIG_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): DEVICE_IDS,
-        vol.Optional("smart_time_on"): cv.positive_int,
-        vol.Optional("smart_time_off"): cv.positive_int,
+        vol.Optional("smart_time_on"): SMART_MINUTES,
+        vol.Optional("smart_time_off"): SMART_MINUTES,
         vol.Optional("led_brightness"): vol.All(
             vol.Coerce(int), vol.Range(min=0, max=100)
         ),

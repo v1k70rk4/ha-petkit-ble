@@ -11,8 +11,18 @@ DEFAULT_SCAN_INTERVAL = 30  # seconds
 DEFAULT_UPDATE_INTERVAL = 10  # seconds
 HEARTBEAT_INTERVAL = 60     # seconds
 
-# Device types
-SUPPORTED_DEVICES = ["W4", "W5", "CTW2", "CTW3"]
+# A fountain advertises its model as its Bluetooth name (Petkit_W4X, Petkit_CTW3_100, ...).
+# The Bluetooth matchers in manifest.json list the same prefixes.
+SUPPORTED_NAME_PREFIXES = ("Petkit_W4", "Petkit_W5", "Petkit_CTW2", "Petkit_CTW3")
+
+
+def is_supported_device_name(name: str | None) -> bool:
+    """Return True if a Bluetooth name is that of a supported fountain.
+
+    Matched from the start of the name: a model code somewhere inside the name
+    of an unrelated device must not offer it for setup as a fountain.
+    """
+    return bool(name) and name.startswith(SUPPORTED_NAME_PREFIXES)
 
 # Entity attributes
 ATTR_BATTERY = "battery"
