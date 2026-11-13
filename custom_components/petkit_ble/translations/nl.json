@@ -220,6 +220,9 @@
     },
     "config_write_unsupported": {
       "message": "Instellingen wijzigen wordt voor dit fonteinmodel nog niet ondersteund."
+    },
+    "model_unknown": {
+      "message": "Het model van de fontein is nog niet bekend. Probeer het over een paar minuten opnieuw."
     }
   },
   "issues": {

@@ -220,6 +220,9 @@
     },
     "config_write_unsupported": {
       "message": "Ennél az itatótípusnál a beállítások módosítása még nem támogatott."
+    },
+    "model_unknown": {
+      "message": "Az itató típusa még nem ismert. Próbáld újra néhány perc múlva."
     }
   },
   "issues": {

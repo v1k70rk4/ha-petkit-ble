@@ -95,10 +95,10 @@ class HABluetoothAdapter:
             petkit_devices: dict[str, Any] = {}
 
             for info in discovered:
-                # Looser than the discovery check on purpose: this only reads
-                # the model byte for an address that is already configured, and
-                # missing it would treat a CTW3 as a W5.
-                if info.name and any(t in info.name for t in ["W4", "W5", "CTW2", "CTW3"]):
+                # By address, not by name: this only reads the model of the
+                # fountain that is already configured, and a passive scanner
+                # has no name for it until its next active scan.
+                if info.address.upper() == self.address.upper():
                     # No made-up model byte when there is no service data: the
                     # model then comes from an earlier connection or the name.
                     service_data = info.service_data or {}
@@ -113,8 +113,10 @@ class HABluetoothAdapter:
                             }
                         }
                     })()
-                    petkit_devices[info.address] = mock
-                    self.connectiondata[info.address] = mock
+                    # Keyed by the configured address, whatever the casing of
+                    # the advertised one: that is the key everything reads.
+                    petkit_devices[self.address] = mock
+                    self.connectiondata[self.address] = mock
 
             for addr, dev in petkit_devices.items():
                 self.logger.debug("Found device: %s (%s)", dev.name, addr)

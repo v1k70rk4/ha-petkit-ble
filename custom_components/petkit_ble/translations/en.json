@@ -220,6 +220,9 @@
     },
     "config_write_unsupported": {
       "message": "Changing settings is not supported on this fountain model yet."
+    },
+    "model_unknown": {
+      "message": "The fountain model is not known yet. Try again in a few minutes."
     }
   },
   "issues": {
