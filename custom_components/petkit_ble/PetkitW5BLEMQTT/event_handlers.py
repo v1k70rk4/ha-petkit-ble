@@ -9,7 +9,6 @@ class EventHandlers:
         # Registry of command values to handler methods
         self.handlers = {
             66: Parsers.device_battery,
-            #73: Parsers.device_init,
             86: Parsers.device_synchronization,
             200: Parsers.device_firmware,
             210: Parsers.device_state,
@@ -17,8 +16,6 @@ class EventHandlers:
             213: Parsers.device_identifiers,
             230: Parsers.device_status,
         }
-
-        # Previously: Messages were forwarded to MQTT for Home Assistant integration
 
     def _parser_context(self):
         return {
@@ -50,14 +47,18 @@ class EventHandlers:
                 self.logger.debug(f"Parsed data\n{data}")
 
             if isinstance(data, dict) and "error" in data:
-                self.logger.warning(f"Skipping command {cmd}: {data['error']}")
+                # Debug only: a device that keeps sending short frames must
+                # not be able to fill the log.
+                self.logger.debug("Skipping command %s: %s", cmd, data["error"])
                 return parsed_data
 
             # Update info (firmware, identifiers, sync)
             if cmd in [86, 200, 213]:
-                self.logger.info(f"Updating device info with command {cmd}")
                 self.device.info = data
-                self.logger.info(f"Device info after update: firmware={self.device.firmware}, serial={self.device.serial}")
+                self.logger.debug(
+                    "Device info after command %s: firmware=%s, serial=%s",
+                    cmd, self.device.firmware, self.device.serial,
+                )
 
             # Update status
             if cmd in [66, 210, 211, 230]:
@@ -66,7 +67,5 @@ class EventHandlers:
             # byte included) makes them safe; a short one blocks them again.
             if cmd == 211:
                 self.device.config_received = data.get("is_locked") is not None
-                
-        # Previously: Device status forwarded to MQTT when cmd in [220, 221, 230]
-        
+
         return parsed_data

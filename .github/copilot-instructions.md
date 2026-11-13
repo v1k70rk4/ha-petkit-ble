@@ -11,9 +11,10 @@
 This repository is a custom Home Assistant integration, distributed through HACS, for Petkit water fountains (W4, W5, CTW2, CTW3 series). It talks to the devices locally over Bluetooth LE through Home Assistant's Bluetooth integration.
 
 - Integration code: `custom_components/petkit_ble/`.
-- Device protocol library: `custom_components/petkit_ble/PetkitW5BLEMQTT/`. This vendored copy is the one Home Assistant loads. The top-level `PetkitW5BLEMQTT/` and `main.py` are the original standalone tool; changes for the integration belong in the vendored copy.
+- Device protocol library: `custom_components/petkit_ble/PetkitW5BLEMQTT/`. It is a vendored and since reworked copy of the standalone tool [slespersen/PetkitW5BLEMQTT](https://github.com/slespersen/PetkitW5BLEMQTT); only what the integration uses is kept.
 - The minimum supported Home Assistant version is the `homeassistant` field in `hacs.json`. Do not suggest workarounds for older Home Assistant or Python versions.
-- There is no test suite. CI runs hassfest, HACS validation, Ruff and CodeQL, plus OpenSSF Scorecard on main.
+- Tests: `python -m pip install -r requirements_test.txt` then `python -m pytest`. They run on Home Assistant itself through `pytest-homeassistant` (Home Assistant's own test package), so they need Linux or WSL and the Python version that Home Assistant uses (3.14.2 or newer at the time of writing); see `tests/README.md`. A bug fix comes with a test that fails without the fix.
+- CI runs the tests, hassfest, HACS validation, Ruff and CodeQL, plus OpenSSF Scorecard on main.
 
 ## BLE connection handling
 
@@ -35,7 +36,7 @@ These rules come from real failures. Review changes to `ha_bluetooth_adapter.py`
 - Build device info with `DeviceInfo(...)` keyword arguments. `DeviceInfo` is a dataclass since Home Assistant 2026.11: do not use dict operations (`|`, iteration, `len()`, `isinstance(..., dict)`) on it, and remember that an unset field reads as `UNDEFINED`, which is truthy.
 - The internal `"Uninitialized"` sentinel must never reach the device registry (name, model, firmware).
 - Model-specific entities (CTW3 sensors, schedule time entities, mode select) use `_attr_entity_registry_enabled_default = False`. New model-specific entities should follow this.
-- CTW3 devices are detected by `device_type == 24`; their alias is never `"CTW3"`. Use the existing helpers in `const.py` and `parsers.py`.
+- CTW3 devices are detected by `device_type == 24`; their alias is never `"CTW3"`. Use the existing helpers: `Parsers._is_ctw3` and the coordinator's `is_ctw3`.
 - Constants used by more than one module belong in `const.py`. Never import a constant from one platform module into another.
 
 ## Translations

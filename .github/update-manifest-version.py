@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Update manifest.json version to match Git tag version.
-This script is used by the release workflow to ensure version consistency.
+Set the version in manifest.json.
+release.sh runs it when it opens a release pull request.
 """
 
 import json
@@ -76,11 +76,8 @@ def main():
     # Path to manifest
     manifest_path = Path(__file__).parent.parent / 'custom_components' / 'petkit_ble' / 'manifest.json'
     
-    # Update version
-    updated = update_manifest_version(str(manifest_path), version)
-    
-    # Exit with appropriate code
-    sys.exit(0 if updated or not updated else 1)
+    # Update version; a version that already matches is fine too
+    update_manifest_version(str(manifest_path), version)
 
 if __name__ == "__main__":
     main()

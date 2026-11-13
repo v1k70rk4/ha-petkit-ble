@@ -21,14 +21,11 @@
       }
     },
     "error": {
-      "cannot_connect": "Nem sikerült csatlakozni az eszközhöz. Ellenőrizze, hogy az eszköz be van-e kapcsolva és hatótávolságon belül van-e.",
-      "unknown": "Ismeretlen hiba történt."
+      "invalid_address": "Ez nem Bluetooth-cím. A helyes forma: AA:BB:CC:DD:EE:FF."
     },
     "abort": {
       "already_configured": "Ez az eszköz már be van állítva.",
-      "no_devices_found": "Nem található Petkit BLE-eszköz. Ellenőrizze, hogy az eszköz be van-e kapcsolva és felderíthető állapotban van-e.",
-      "not_supported": "Ez az eszköz nem támogatott Petkit ivókút.",
-      "cannot_connect": "Nem sikerült csatlakozni az eszközhöz."
+      "not_supported": "Ez az eszköz nem támogatott Petkit ivókút."
     }
   },
   "options": {

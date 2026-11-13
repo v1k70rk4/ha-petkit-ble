@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -14,9 +15,17 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.core import callback
 
-from .const import DOMAIN, SUPPORTED_DEVICES, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+from .const import (
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    is_supported_device_name,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+MAC_ADDRESS = re.compile(r"(?:[0-9A-F]{2}:){5}[0-9A-F]{2}")
+
 
 class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Petkit BLE."""
@@ -91,23 +100,28 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            address = user_input[CONF_ADDRESS]
-            await self.async_set_unique_id(format_mac(address))
-            self._abort_if_unique_id_configured()
+            # Typed by hand, so it is checked; Home Assistant's Bluetooth
+            # integration reports addresses in upper case.
+            address = user_input[CONF_ADDRESS].strip().upper()
+            if not MAC_ADDRESS.fullmatch(address):
+                errors[CONF_ADDRESS] = "invalid_address"
+            else:
+                await self.async_set_unique_id(format_mac(address))
+                self._abort_if_unique_id_configured()
 
-            # Test connection if possible, but allow configuration even if test fails
-            connection_tested = await self._test_connection(address)
-            if not connection_tested:
-                _LOGGER.warning(
-                    f"Could not verify connection to {address}, but allowing configuration. "
-                    "Device may not be in range or powered on."
+                # Test connection if possible, but allow configuration even if test fails
+                connection_tested = await self._test_connection(address)
+                if not connection_tested:
+                    _LOGGER.warning(
+                        f"Could not verify connection to {address}, but allowing configuration. "
+                        "Device may not be in range or powered on."
+                    )
+
+                return self.async_create_entry(
+                    title=f"Petkit Water Fountain ({address})",
+                    data={CONF_ADDRESS: address},
+                    options={CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL},
                 )
-            
-            return self.async_create_entry(
-                title=f"Petkit Water Fountain ({address})",
-                data={CONF_ADDRESS: address},
-                options={CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL},
-            )
 
         return self.async_show_form(
             step_id="manual",
@@ -127,9 +141,7 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         address = discovery_info.address
         
         # Check if this is a supported Petkit device
-        if not device_name or not any(
-            supported in device_name for supported in SUPPORTED_DEVICES
-        ):
+        if not is_supported_device_name(device_name):
             return self.async_abort(reason="not_supported")
 
         await self.async_set_unique_id(format_mac(address))
@@ -177,8 +189,7 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Filter for supported Petkit devices
             petkit_devices = {}
             for service_info in discovered_devices:
-                if (service_info.name and 
-                    any(device_type in service_info.name for device_type in SUPPORTED_DEVICES)):
+                if is_supported_device_name(service_info.name):
                     petkit_devices[service_info.address] = service_info
                     _LOGGER.info(f"Found Petkit device: {service_info.name} ({service_info.address})")
             

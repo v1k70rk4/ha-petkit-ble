@@ -1,4 +1,3 @@
-import asyncio
 from .utils import Utils
 
 class Commands:
@@ -16,15 +15,26 @@ class Commands:
             self.sequence = 0
     
     def init_device_data(self):
-        connectiondata = self.ble_manager.connectiondata[self.device.mac].details
+        connection = self.ble_manager.connectiondata[self.device.mac]
+        connectiondata = connection.details
         self.device.status = {"rssi": connectiondata['props']['RSSI']}
         
         discovered_bytes = Utils.bytes_to_unsigned_integers(Utils.combine_byte_arrays(connectiondata['props']['ServiceData']))
-        device_integer_identifier = discovered_bytes[5]
+        # Advertisement data is untrusted: a short one must not fail every
+        # initialization attempt.
+        device_integer_identifier = discovered_bytes[5] if len(discovered_bytes) > 5 else None
 
         self.logger.debug(f"Received ServiceData {discovered_bytes}")
-        
-        device_properties = Utils.get_device_properties(device_integer_identifier)
+
+        if device_integer_identifier is None and self.device.device_type:
+            # A model identified on an earlier connection stands: incomplete
+            # data must not turn a CTW3 into an unknown model, which would be
+            # parsed with the W4/W5 layout.
+            return
+
+        device_properties = Utils.get_device_properties(
+            device_integer_identifier, getattr(connection, "name", None)
+        )
 
         self.device.name = device_properties['name']
         self.device.name_readable = device_properties['name'].replace("_", " ") # Replace _ with space
@@ -33,45 +43,6 @@ class Commands:
         self.device.device_type = device_properties['device_type']
         self.device.type_code = device_properties['type_code']
     
-    async def init_device_connection(self):
-        # Basically this function secures the sequence
-        # of which we're sending the commands.
-        # At the same time, we're ensuring we're getting
-        # the necessary parameters registered - e.g. serial
-        await self.get_device_details()
-        await asyncio.sleep(1.5)
-        
-        await self.init_device()
-        
-        await self.get_device_sync()
-        await asyncio.sleep(0.75)
-        await self.set_datetime()
-        await asyncio.sleep(0.75)
-        
-        while self.device.serial in "Uninitialized" or self.device.serial == 0:
-            await self.get_device_details()
-            await asyncio.sleep(1.5)
-        
-        if not self.device.device_initialized:
-            await self.init_device()
-            await asyncio.sleep(3.0)
-            
-            await self.ble_manager.disconnect_device(self.mac)
-            await asyncio.sleep(1.0)
-            await self.ble_manager.connect_device(self.mac)
-            await asyncio.sleep(1.0)
-            await self.init_device_connection()
-
-        await self.get_device_info()
-        await asyncio.sleep(0.75)
-        await self.get_device_type()
-        await asyncio.sleep(0.75)
-        await self.get_battery()
-        await asyncio.sleep(0.75)
-        await self.get_device_state()
-        await asyncio.sleep(0.75)
-        await self.get_device_config()
-
     async def get_battery(self):
         cmd = 66                            # Command for getting device details
         type = 1                            # Sending 1
@@ -83,7 +54,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def init_device(self):
@@ -112,7 +83,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def set_datetime(self):
@@ -126,22 +97,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
-        return
-
-    async def get_device_sync(self):
-        cmd = 86                            # Command for getting device details
-        type = 1                            # Type is 1 for sending - 2 for receiving
-        seq = self.sequence                 # Example sequence number
-        #data = [0, 0, 253, 54, 124, 210, 241, 44]   # What's going on here?
-        data = [0, 0] + self.secret         # What's going on here?
-        
-        bytes = Utils.build_command(seq, cmd, type, data)
-        await self.ble_manager.message_producer(bytes)
-        
-        self.increment_sequence()
-        
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def get_device_info(self):
@@ -155,21 +111,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
-        return
-        
-    async def get_device_type(self):
-        cmd = 201                           # Command for getting device details
-        type = 1                            # Type is 1 for sending - 2 for receiving
-        seq = self.sequence                 # Example sequence number
-        data = [] 
-        
-        bytes = Utils.build_command(seq, cmd, type, data)
-        await self.ble_manager.message_producer(bytes)
-        
-        self.increment_sequence()
-        
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
         
     async def get_device_state(self):
@@ -183,7 +125,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
         
     async def get_device_config(self):
@@ -197,7 +139,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def get_device_details(self, force: bool = False):
@@ -216,17 +158,9 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
     
-    # Not used -- maybe never
-    async def set_light_setting(self):
-        return
-
-    # Not used -- maybe never
-    async def set_dnd_setting(self):
-        return
-
     async def set_device_mode(self, state, mode):
         cmd = 220                           # Command for getting device details
         type = 1                            # Type is 1 for sending - 2 for receiving
@@ -238,7 +172,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     #async def set_device_config(self, smart_time_on, smart_time_off, led_switch, led_brightness, led_light_time_on_1, led_light_time_on_2, led_light_time_off_1, led_light_time_off_2, do_not_disturb_switch, do_not_disturb_time_start_1, do_not_disturb_time_start_2, do_not_disturb_time_end_1, do_not_disturb_time_end_2, is_locked):
@@ -253,7 +187,7 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
     async def set_reset_filter(self):
@@ -267,17 +201,9 @@ class Commands:
 
         self.increment_sequence()
 
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return
 
-
-    # Not used -- maybe never
-    async def set_updated_light(self):
-        return
-
-    # Not used -- maybe never
-    async def set_updated_dnd(self):
-        return
         
     async def get_device_update(self):
         cmd = 230                           # Command for getting device details
@@ -290,5 +216,5 @@ class Commands:
         
         self.increment_sequence()
         
-        self.logger.info(f"Queued command: {cmd}")
+        self.logger.debug("Queued command: %s", cmd)
         return

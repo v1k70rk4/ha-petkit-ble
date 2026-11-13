@@ -12,8 +12,13 @@ from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .const import DATA_UNDISCONNECTED
+
 _LOGGER = logging.getLogger(__name__)
 
+# After an unload: the waits, in seconds, before each further attempt to
+# disconnect a client whose disconnect keeps failing.
+LEFTOVER_DISCONNECT_DELAYS = (1.0, 5.0, 15.0, 60.0)
 
 class ConnectionStatus(Enum):
     DISCONNECTED = "disconnected"
@@ -32,10 +37,8 @@ class HABluetoothAdapter:
         self.event_handler = event_handler
         self.logger = logger or _LOGGER
         self.connected_devices: dict[str, Any] = {}
-        self.available_devices: dict[str, Any] = {}
         self.connectiondata: dict[str, Any] = {}
         self.queue: asyncio.Queue = asyncio.Queue(10)
-        self._client = None
         self._ble_device = None
 
         # Connection state
@@ -45,7 +48,20 @@ class HABluetoothAdapter:
         self._connection_attempts = 0
         self._connection_error: str | None = None
         self._reconnect_lock = asyncio.Lock()
-        self._reconnection_active = False
+        # Reconnects started from the write path. They are tracked so that an
+        # unload can cancel them; an untracked one would keep reconnecting and
+        # hold the fountain's only connection after the entry is gone.
+        self._background_tasks: set[asyncio.Task] = set()
+        self._closed = False
+        # Clients whose disconnect() raised. One may still hold the fountain's
+        # only connection, so it is kept here, never used as a connection, and
+        # disconnected again before the next connect and on unload. The list
+        # lives in hass.data, per address: if it cannot be disconnected even
+        # after the unload, the adapter of the entry's next setup inherits it.
+        self._undisconnected: list[Any] = hass.data.setdefault(
+            DATA_UNDISCONNECTED, {}
+        ).setdefault(address, [])
+        self._leftover_task: asyncio.Task | None = None
 
     # ── Public properties ──────────────────────────────────────────
 
@@ -79,8 +95,13 @@ class HABluetoothAdapter:
             petkit_devices: dict[str, Any] = {}
 
             for info in discovered:
+                # Looser than the discovery check on purpose: this only reads
+                # the model byte for an address that is already configured, and
+                # missing it would treat a CTW3 as a W5.
                 if info.name and any(t in info.name for t in ["W4", "W5", "CTW2", "CTW3"]):
-                    service_data = info.service_data or {"default": [0, 0, 0, 0, 0, 206]}
+                    # No made-up model byte when there is no service data: the
+                    # model then comes from an earlier connection or the name.
+                    service_data = info.service_data or {}
                     mock = type('MockDevice', (), {
                         'name': info.name,
                         'address': info.address,
@@ -95,9 +116,8 @@ class HABluetoothAdapter:
                     petkit_devices[info.address] = mock
                     self.connectiondata[info.address] = mock
 
-            self.available_devices = petkit_devices
             for addr, dev in petkit_devices.items():
-                self.logger.info(f"Found device: {dev.name} ({addr})")
+                self.logger.debug("Found device: %s (%s)", dev.name, addr)
             return petkit_devices
 
         except Exception as err:
@@ -111,6 +131,10 @@ class HABluetoothAdapter:
         try:
             self._set_status(ConnectionStatus.CONNECTING if self._connection_attempts == 0
                              else ConnectionStatus.RECONNECTING)
+
+            # A client that could not be disconnected earlier may still hold
+            # the fountain's only connection; this connect would fail behind it.
+            await self._retry_failed_disconnects()
 
             self._ble_device = bluetooth.async_ble_device_from_address(
                 self.hass, address, connectable=True
@@ -154,7 +178,7 @@ class HABluetoothAdapter:
                 getattr(self._ble_device, "details", None),
                 address.lower(),
             )
-            self._client = await establish_connection(
+            client = await establish_connection(
                 BleakClient, self._ble_device, address.lower(), timeout=10.0,
                 disconnected_callback=_on_disconnect,
             )
@@ -172,7 +196,7 @@ class HABluetoothAdapter:
             # Settings may have changed while the link was down; config writes
             # wait for a fresh CMD 211 answer on this connection.
             self.event_handler.device.config_received = False
-            self.connected_devices[address] = self._client
+            self.connected_devices[address] = client
             self._set_status(ConnectionStatus.CONNECTED)
             self._touch()
             self.logger.info(
@@ -201,53 +225,106 @@ class HABluetoothAdapter:
                 )
             return False
 
-    async def disconnect_device(self, address: str) -> bool:
-        """Disconnect from device."""
-        try:
-            client = self.connected_devices.pop(address, None)
-            if client and hasattr(client, 'disconnect'):
-                await client.disconnect()
-            self._set_status(ConnectionStatus.DISCONNECTED)
+    async def _disconnect_client(self, address: str) -> bool:
+        """Disconnect the tracked client, then stop tracking it.
+
+        The client stays in connected_devices while its disconnect is awaited.
+        A task cancelled at that point (an unload during a reconnect) then
+        leaves it tracked, so the cleanup that follows can still disconnect
+        it; untracked, it would keep the fountain's only connection.
+
+        A client whose disconnect raises may be connected still. It leaves
+        connected_devices, so nothing writes to it or takes it for a working
+        link, and goes to _undisconnected to be disconnected again later.
+        Returns False in that case.
+        """
+        client = self.connected_devices.get(address)
+        if client is None:
             return True
+        ok = True
+        try:
+            await client.disconnect()
         except Exception as err:
+            ok = False
+            self.logger.debug("Disconnect failed: %s: %s", type(err).__name__, err)
+        # Only if it is still the tracked one: a reconnect may have replaced it.
+        if self.connected_devices.get(address) is client:
             self.connected_devices.pop(address, None)
-            self.logger.warning(f"Error during disconnect: {err}")
-            self._set_status(ConnectionStatus.DISCONNECTED)
-            return False
+        if not ok and client not in self._undisconnected:
+            self._undisconnected.append(client)
+        return ok
+
+    async def _retry_failed_disconnects(self) -> bool:
+        """Disconnect again the clients whose disconnect failed; True if none is left."""
+        for client in list(self._undisconnected):
+            if getattr(client, "is_connected", True):
+                try:
+                    await client.disconnect()
+                except Exception as err:
+                    self.logger.debug(
+                        "Disconnect failed again: %s: %s", type(err).__name__, err
+                    )
+                    continue
+            # The list is shared with a closed adapter that may still retry.
+            if client in self._undisconnected:
+                self._undisconnected.remove(client)
+        return not self._undisconnected
+
+    async def disconnect_device(self, address: str) -> bool:
+        """Disconnect from device; False if a client could not be disconnected."""
+        await self._disconnect_client(address)
+        clean = await self._retry_failed_disconnects()
+        if not clean:
+            self.logger.warning("Error during disconnect")
+            self._schedule_leftover_disconnects()
+        self._set_status(ConnectionStatus.DISCONNECTED)
+        return clean
+
+    def _schedule_leftover_disconnects(self) -> None:
+        """Once closed, keep trying for a while to disconnect what is left.
+
+        While the entry is loaded the next connect retries a failed disconnect.
+        After the unload nothing would, and a client left connected would keep
+        the fountain's only connection, also from the entry's next setup.
+        """
+        if not self._closed or not self._undisconnected:
+            return
+        if self._leftover_task and not self._leftover_task.done():
+            return
+        self._leftover_task = self.hass.async_create_background_task(
+            self._disconnect_leftovers(), name=f"petkit_ble disconnect {self.address}"
+        )
+
+    async def _disconnect_leftovers(self) -> None:
+        """Retry the failed disconnects a few times, then say so and stop."""
+        for delay in LEFTOVER_DISCONNECT_DELAYS:
+            await asyncio.sleep(delay)
+            if await self._retry_failed_disconnects():
+                return
+        # Still owned: it stays in hass.data, and the next setup of this
+        # address tries again before it connects.
+        self.logger.warning(
+            "Could not disconnect from %s after unloading; the next setup tries "
+            "again. If it cannot be reached then, restart the Bluetooth adapter "
+            "or Home Assistant",
+            self.address,
+        )
 
     # ── Read / Write ───────────────────────────────────────────────
-
-    async def read_characteristic(self, address: str, characteristic_uuid: str) -> bytes | None:
-        """Read a GATT characteristic."""
-        client = self.connected_devices.get(address)
-        if not client:
-            self.logger.debug(f"Device {address} not connected for read")
-            return None
-        try:
-            data = await client.read_gatt_char(characteristic_uuid)
-            return data
-        except Exception as err:
-            self.logger.error(f"Read failed ({characteristic_uuid}): {err}")
-            return None
 
     async def write_characteristic(self, address: str, characteristic_uuid: str, data: bytes) -> bool:
         """Write a GATT characteristic. Triggers reconnection on failure."""
         client = self.connected_devices.get(address)
         if not client:
             self.logger.debug("Device not connected for write, requesting reconnect")
-            asyncio.create_task(self.ensure_connected(address))
+            self._request_reconnect(address)
             return False
 
         if hasattr(client, 'is_connected') and not client.is_connected:
             self.logger.warning("Client stale, requesting reconnect")
-            stale = self.connected_devices.pop(address, None)
-            if stale:
-                try:
-                    await stale.disconnect()
-                except Exception:
-                    pass
+            await self._disconnect_client(address)
             self._set_status(ConnectionStatus.RECONNECTING)
-            asyncio.create_task(self.ensure_connected(address))
+            self._request_reconnect(address)
             return False
 
         try:
@@ -265,14 +342,9 @@ class HABluetoothAdapter:
             # Physically disconnect the dead client — popping alone leaves it
             # holding the device's single BLE connection slot as an untracked
             # ghost, which blocks every future reconnect until an HA restart.
-            stale = self.connected_devices.pop(address, None)
-            if stale:
-                try:
-                    await stale.disconnect()
-                except Exception:
-                    pass
+            await self._disconnect_client(address)
             self._set_status(ConnectionStatus.RECONNECTING)
-            asyncio.create_task(self.ensure_connected(address))
+            self._request_reconnect(address)
             return False
 
     # ── Notifications ──────────────────────────────────────────────
@@ -396,6 +468,39 @@ class HABluetoothAdapter:
 
     # ── Reconnection (single entry point) ──────────────────────────
 
+    def _request_reconnect(self, address: str) -> None:
+        """Start a tracked background reconnect, unless the adapter is closed.
+
+        One at a time: while one is pending, further requests are covered by it.
+        """
+        if self._closed or any(not task.done() for task in self._background_tasks):
+            return
+        task = self.hass.async_create_background_task(
+            self.ensure_connected(address), name=f"petkit_ble reconnect {address}"
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def async_cancel_reconnects(self) -> None:
+        """Cancel the background reconnects started from the write path."""
+        current = asyncio.current_task()
+        tasks = [
+            task
+            for task in self._background_tasks
+            if task is not current and not task.done()
+        ]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def async_close(self) -> None:
+        """Stop reconnecting for good; called when the config entry unloads."""
+        self._closed = True
+        await self.async_cancel_reconnects()
+        if not await self._retry_failed_disconnects():
+            self._schedule_leftover_disconnects()
+
     async def force_reconnect(self, address: str) -> bool:
         """Tear down a stale-but-'connected' client and reconnect from scratch.
 
@@ -405,13 +510,7 @@ class HABluetoothAdapter:
         reconnection loop again (and the attempt counter starts climbing).
         """
         self.logger.warning(f"💀 {address} unresponsive — forcing reconnect")
-        client = self.connected_devices.pop(address, None)
-        if client:
-            try:
-                await client.disconnect()
-            except Exception:
-                pass
-        self._client = None
+        await self._disconnect_client(address)
         self._set_status(ConnectionStatus.RECONNECTING)
         return await self.ensure_connected(address)
 
@@ -419,6 +518,8 @@ class HABluetoothAdapter:
         """Single entry point for reconnection. Uses a lock to prevent parallel attempts."""
         if self.connected_devices.get(address):
             return True
+        if self._closed:
+            return False
 
         if self._reconnect_lock.locked():
             # Another reconnection is already running — wait for it
@@ -426,15 +527,11 @@ class HABluetoothAdapter:
                 return bool(self.connected_devices.get(address))
 
         async with self._reconnect_lock:
-            self._reconnection_active = True
-            try:
-                return await self._reconnection_loop(address)
-            finally:
-                self._reconnection_active = False
+            return await self._reconnection_loop(address)
 
     async def _reconnection_loop(self, address: str) -> bool:
         """Attempt reconnection with progressive delays and periodic BLE reset."""
-        while not self.connected_devices.get(address):
+        while not self._closed and not self.connected_devices.get(address):
             if self._connection_attempts % 5 == 0 or self._connection_attempts < 3:
                 self.logger.info(f"🔁 Reconnection attempt #{self._connection_attempts + 1}")
 
@@ -459,12 +556,7 @@ class HABluetoothAdapter:
                 # Connected but couldn't subscribe — tear it down and retry from
                 # scratch instead of declaring a false success.
                 self.logger.warning("Reconnected but notifications failed; tearing down to retry")
-                client = self.connected_devices.pop(address, None)
-                if client:
-                    try:
-                        await client.disconnect()
-                    except Exception:
-                        pass
+                await self._disconnect_client(address)
                 self._connection_attempts += 1
 
             delay = self._retry_delay()
@@ -472,21 +564,15 @@ class HABluetoothAdapter:
                 self.logger.debug(f"Next retry in {delay:.1f}s (attempt #{self._connection_attempts})")
             await asyncio.sleep(delay)
 
-        return True
+        return bool(self.connected_devices.get(address))
 
     async def _reset_ble_stack(self, address: str) -> None:
         """Full BLE stack reset — disconnect, discard client, re-discover device."""
         try:
             # Force disconnect stale client
-            client = self.connected_devices.pop(address, None)
-            if client:
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
+            await self._disconnect_client(address)
 
             # Discard cached BLE device reference so HA rediscovers it fresh
-            self._client = None
             self._ble_device = None
 
             # Re-scan to get a fresh BLE device handle from HA's bluetooth stack
@@ -510,12 +596,6 @@ class HABluetoothAdapter:
         # After 50+ attempts, slow down significantly to avoid hammering
         return 15.0
 
-    # ── Heartbeat (no-op, polling handled by coordinator) ──────────
-
-    async def heartbeat(self, interval: int) -> None:
-        """No-op — polling is handled by the coordinator."""
-        pass
-
     # ── Internal helpers ───────────────────────────────────────────
 
     def _set_status(self, status: ConnectionStatus, error: str | None = None):
@@ -531,8 +611,3 @@ class HABluetoothAdapter:
         """Update last-seen timestamp."""
         self._last_seen = dt_util.now().isoformat()
 
-    def reset_connection_state(self):
-        """Reset connection tracking for a clean restart."""
-        self._connection_status = ConnectionStatus.DISCONNECTED
-        self._connection_attempts = 0
-        self._connection_error = None

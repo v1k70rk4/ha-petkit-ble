@@ -8,7 +8,6 @@ class Device:
         self.device_id = 0
         self.device_id_bytes = []
         self.serial = "Uninitialized"
-        self.secret = [0, 0, 0, 0, 0, 0, 13, 37]
         self.mac = address
         self.mac_readable = address.replace(":", "") # Replace : with nothing
         self.name = "Uninitialized"
@@ -19,7 +18,7 @@ class Device:
         self.device_type = 0
         self.type_code = 0
         self.rssi = 0
-        # Connection tracking (will be set by BLEManager)
+        # Connection tracking (set by the Bluetooth adapter)
         self._ble_manager = None
         self._mac_readable = self.mac_readable
         self._name_readable = self.name_readable
@@ -46,8 +45,9 @@ class Device:
         self._warning_breakdown = None
         self._warning_water_missing = None
         self._warning_filter = None
-        self._pump_runtime = 0
-        self._pump_runtime_today = 0
+        # None until the device reports them, so the sensors stay unknown.
+        self._pump_runtime = None
+        self._pump_runtime_today = None
         self._pump_runtime_readable = 0
         self._pump_runtime_today_readable = 0
         self._purified_water = None
@@ -106,6 +106,8 @@ class Device:
             "mode": self._mode,
             "name_readable": self._name_readable,
             "power_status": self._power_status,
+            "pump_runtime": self._pump_runtime,
+            "pump_runtime_today": self._pump_runtime_today,
             "pump_runtime_readable": self._pump_runtime_readable,
             "pump_runtime_today_readable": self._pump_runtime_today_readable,
             "purified_water": self._purified_water,

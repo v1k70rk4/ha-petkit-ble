@@ -1,0 +1,4 @@
+# Home Assistant and its test helpers for the integration's tests (Python 3.14.2 or newer).
+# Bump together with the Home Assistant version the tests should run against.
+# The bluetooth extra brings what Home Assistant's Bluetooth integration needs to load.
+pytest-homeassistant[bluetooth]==2026.11.1

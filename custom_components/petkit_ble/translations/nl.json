@@ -21,14 +21,11 @@
       }
     },
     "error": {
-      "cannot_connect": "Kan geen verbinding maken met het apparaat. Zorg dat het aan staat en binnen bereik is.",
-      "unknown": "Er is een onverwachte fout opgetreden."
+      "invalid_address": "Dit is geen Bluetooth-adres. Gebruik de vorm AA:BB:CC:DD:EE:FF."
     },
     "abort": {
       "already_configured": "Dit apparaat is al geconfigureerd.",
-      "no_devices_found": "Er zijn geen Petkit BLE-apparaten gevonden. Zorg ervoor dat uw apparaat aan staat en in de koppelingsmodus staat.",
-      "not_supported": "Dit apparaat is geen ondersteund Petkit waterfonteintje.",
-      "cannot_connect": "Kan geen verbinding maken met het apparaat."
+      "not_supported": "Dit apparaat is geen ondersteund Petkit waterfonteintje."
     }
   },
   "options": {
