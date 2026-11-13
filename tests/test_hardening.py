@@ -260,6 +260,53 @@ async def test_disconnect_that_keeps_failing_is_reported_and_kept(hass, loaded_e
     assert client.disconnect.await_count == 2
 
 
+async def test_disconnect_that_keeps_failing_during_unload_is_retried_then_reported(
+    hass, loaded_entry, caplog
+):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client = _client(OSError("busy"))
+    adapter.connected_devices[ADDRESS] = client
+
+    with patch(f"{ADAPTER}.LEFTOVER_DISCONNECT_DELAYS", (0.01, 0.01, 0.01)):
+        assert await hass.config_entries.async_unload(loaded_entry.entry_id)
+        # The unload itself tried twice; the entry is gone, the retries go on.
+        assert client.disconnect.await_count == 2
+        assert adapter._leftover_task is not None
+        await adapter._leftover_task
+
+    assert client.disconnect.await_count == 5
+    assert adapter._undisconnected == [client]
+    assert ADDRESS not in adapter.connected_devices
+    assert "Could not disconnect" in caplog.text
+
+
+async def test_disconnect_that_fails_during_unload_is_retried_until_it_works(
+    hass, loaded_entry, caplog
+):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client = _client([OSError("busy"), OSError("busy"), OSError("busy"), None])
+    adapter.connected_devices[ADDRESS] = client
+
+    with patch(f"{ADAPTER}.LEFTOVER_DISCONNECT_DELAYS", (0.01, 0.01, 0.01)):
+        assert await hass.config_entries.async_unload(loaded_entry.entry_id)
+        await adapter._leftover_task
+
+    assert client.disconnect.await_count == 4
+    assert adapter._undisconnected == []
+    assert "Could not disconnect" not in caplog.text
+
+
+async def test_no_disconnect_retries_are_scheduled_while_the_entry_is_loaded(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client = _client(OSError("busy"))
+    adapter.connected_devices[ADDRESS] = client
+
+    assert await adapter.disconnect_device(ADDRESS) is False
+    # The next connect retries it; no extra task is needed.
+    assert adapter._leftover_task is None
+    client.disconnect = AsyncMock()
+
+
 # -- An absent fountain must not fill the log ---------------------------------
 
 

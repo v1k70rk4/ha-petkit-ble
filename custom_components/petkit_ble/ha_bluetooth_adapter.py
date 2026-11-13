@@ -14,6 +14,9 @@ from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
+# After an unload: the waits, in seconds, before each further attempt to
+# disconnect a client whose disconnect keeps failing.
+LEFTOVER_DISCONNECT_DELAYS = (1.0, 5.0, 15.0, 60.0)
 
 class ConnectionStatus(Enum):
     DISCONNECTED = "disconnected"
@@ -52,6 +55,7 @@ class HABluetoothAdapter:
         # only connection, so it is kept here, never used as a connection, and
         # disconnected again before the next connect and on unload.
         self._undisconnected: list[Any] = []
+        self._leftover_task: asyncio.Task | None = None
 
     # ── Public properties ──────────────────────────────────────────
 
@@ -264,8 +268,36 @@ class HABluetoothAdapter:
         clean = await self._retry_failed_disconnects()
         if not clean:
             self.logger.warning("Error during disconnect")
+            self._schedule_leftover_disconnects()
         self._set_status(ConnectionStatus.DISCONNECTED)
         return clean
+
+    def _schedule_leftover_disconnects(self) -> None:
+        """Once closed, keep trying for a while to disconnect what is left.
+
+        While the entry is loaded the next connect retries a failed disconnect.
+        After the unload nothing would, and a client left connected would keep
+        the fountain's only connection, also from the entry's next setup.
+        """
+        if not self._closed or not self._undisconnected:
+            return
+        if self._leftover_task and not self._leftover_task.done():
+            return
+        self._leftover_task = self.hass.async_create_background_task(
+            self._disconnect_leftovers(), name=f"petkit_ble disconnect {self.address}"
+        )
+
+    async def _disconnect_leftovers(self) -> None:
+        """Retry the failed disconnects a few times, then say so and stop."""
+        for delay in LEFTOVER_DISCONNECT_DELAYS:
+            await asyncio.sleep(delay)
+            if await self._retry_failed_disconnects():
+                return
+        self.logger.warning(
+            "Could not disconnect from %s after unloading. If it cannot be reached "
+            "again, restart the Bluetooth adapter or Home Assistant",
+            self.address,
+        )
 
     # ── Read / Write ───────────────────────────────────────────────
 
@@ -455,7 +487,8 @@ class HABluetoothAdapter:
         """Stop reconnecting for good; called when the config entry unloads."""
         self._closed = True
         await self.async_cancel_reconnects()
-        await self._retry_failed_disconnects()
+        if not await self._retry_failed_disconnects():
+            self._schedule_leftover_disconnects()
 
     async def force_reconnect(self, address: str) -> bool:
         """Tear down a stale-but-'connected' client and reconnect from scratch.
