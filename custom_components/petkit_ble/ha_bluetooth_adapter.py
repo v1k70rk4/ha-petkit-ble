@@ -113,8 +113,10 @@ class HABluetoothAdapter:
                             }
                         }
                     })()
-                    petkit_devices[info.address] = mock
-                    self.connectiondata[info.address] = mock
+                    # Keyed by the configured address, whatever the casing of
+                    # the advertised one: that is the key everything reads.
+                    petkit_devices[self.address] = mock
+                    self.connectiondata[self.address] = mock
 
             for addr, dev in petkit_devices.items():
                 self.logger.debug("Found device: %s (%s)", dev.name, addr)

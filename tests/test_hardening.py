@@ -755,3 +755,68 @@ async def test_remembered_model_identifies_a_nameless_fountain(hass, loaded_entr
     assert coordinator._identify_model() is True
     assert coordinator.device.device_type == 24
     assert coordinator.is_ctw3
+
+
+async def _identify_from(coordinator, advertisement: SimpleNamespace) -> bool:
+    with patch(
+        f"{ADAPTER}.bluetooth.async_discovered_service_info", return_value=[advertisement]
+    ):
+        await coordinator.ble_manager.scan()
+    return coordinator._identify_model()
+
+
+def _connect_with_config(coordinator) -> None:
+    """Pretend the fountain is connected and has answered CMD 211."""
+    client = MagicMock()
+    client.stop_notify = AsyncMock()
+    client.disconnect = AsyncMock()
+    coordinator.ble_manager.connected_devices[ADDRESS] = client
+    coordinator.device.config_received = True
+
+
+async def test_unmapped_model_byte_without_a_name_identifies_nothing(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    advertisement = SimpleNamespace(
+        name=ADDRESS, address=ADDRESS, rssi=-60, service_data={"x": bytes([0, 0, 0, 0, 0, 99])}
+    )
+    assert await _identify_from(coordinator, advertisement) is False
+    assert coordinator.device.device_type == 0
+    assert coordinator.device.alias == "Uninitialized"
+
+
+async def test_unmapped_model_byte_falls_back_to_the_remembered_model(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    hass.config_entries.async_update_entry(
+        loaded_entry, data={**loaded_entry.data, CONF_MODEL_NAME: "Petkit_CTW3_100"}
+    )
+    advertisement = SimpleNamespace(
+        name=ADDRESS, address=ADDRESS, rssi=-60, service_data={"x": bytes([0, 0, 0, 0, 0, 99])}
+    )
+    assert await _identify_from(coordinator, advertisement) is True
+    assert coordinator.device.device_type == 24
+
+
+async def test_unmapped_petkit_name_is_read_but_never_written(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    advertisement = SimpleNamespace(
+        name="Petkit_W5_NEW", address=ADDRESS, rssi=-60, service_data={}
+    )
+    assert await _identify_from(coordinator, advertisement) is True
+    assert coordinator.device.device_type == 0
+    assert not coordinator.is_ctw3
+
+    _connect_with_config(coordinator)
+    assert coordinator.config_writable is False
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_update_config(led_switch=0)
+    assert err.value.translation_key == "config_write_unsupported"
+
+
+async def test_scan_keys_the_fountain_by_the_configured_address(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    advertisement = SimpleNamespace(
+        name="Petkit_W5", address=ADDRESS.lower(), rssi=-60, service_data={}
+    )
+    assert await _identify_from(coordinator, advertisement) is True
+    assert list(coordinator.ble_manager.connectiondata) == [ADDRESS]
+    assert coordinator.device.device_type == 14

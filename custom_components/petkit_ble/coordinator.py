@@ -343,19 +343,26 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         else from the name remembered from an earlier identification. Without
         either the model stays unknown: guessing a W5 would parse a CTW3 with
         the wrong layout and let config writes through to it.
+
+        A model byte that is in no table tells nothing by itself. A Petkit
+        name that is in no table still tells the frame layout (CTW3 or not),
+        so such a fountain is read, but its config is never written.
         """
         if self._model_identified:
             return True
 
         connection = self.ble_manager.connectiondata.get(self.address)
         name = getattr(connection, "name", None)
-        model_bytes = b""
+        model_byte = None
         if connection is not None:
             model_bytes = Utils.combine_byte_arrays(
                 connection.details["props"]["ServiceData"]
             )
+            if len(model_bytes) > 5:
+                model_byte = model_bytes[5]
+        advertised = Utils.get_device_properties(model_byte, name)
 
-        if len(model_bytes) > 5 or is_supported_device_name(name):
+        if advertised["device_type"] or is_supported_device_name(name):
             self.commands.init_device_data()
         elif stored_name := self.entry.data.get(CONF_MODEL_NAME):
             properties = Utils.get_device_properties(None, stored_name)
@@ -530,6 +537,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         """Return True when a CMD 221 config write is safe to send."""
         return (
             self._model_identified
+            and bool(self.device.device_type)
             and self.device.config_received
             and not self.is_ctw3
             and bool(self.ble_manager.connected_devices.get(self.address))
@@ -542,9 +550,10 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="model_unknown"
             )
-        if self.is_ctw3:
+        if self.is_ctw3 or not self.device.device_type:
             # The CTW3 reports its config in a different layout (battery work
-            # and sleep times); the W4/W5 write layout would corrupt it.
+            # and sleep times); the W4/W5 write layout would corrupt it. A
+            # model that is in no table has no known write layout at all.
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="config_write_unsupported"
             )
