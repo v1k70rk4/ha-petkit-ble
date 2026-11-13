@@ -16,13 +16,21 @@ from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .const import CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN
+from .const import (
+    CONF_ADDRESS,
+    CONF_MODEL_NAME,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    is_supported_device_name,
+)
 from .ha_bluetooth_adapter import HABluetoothAdapter
 from .PetkitW5BLEMQTT.commands import Commands
 from .PetkitW5BLEMQTT.constants import Constants
 from .PetkitW5BLEMQTT.device import Device
 from .PetkitW5BLEMQTT.event_handlers import EventHandlers
 from .PetkitW5BLEMQTT.parsers import Parsers
+from .PetkitW5BLEMQTT.utils import Utils
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,6 +118,10 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         self._data_timeout: float = max(30.0, self.update_interval * 3)
         # Baseline for the reachability check until the first notification.
         self._started_at: float = time.monotonic()
+        # False until the model is known. The W4/W5 and the CTW3 lay out their
+        # status and config frames differently, so nothing that depends on the
+        # layout is requested or written before that.
+        self._model_identified = False
         self._issue_id = f"cannot_connect_in_range_{entry.entry_id}"
 
         entry.async_on_unload(entry.add_update_listener(self._on_options_updated))
@@ -224,16 +236,13 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 else:
                     raise UpdateFailed("Client not ready after 5 checks")
 
-            # Init device data from scan results
-            if self.address in self.ble_manager.connectiondata:
-                self.commands.init_device_data()
-            else:
-                _LOGGER.warning(f"No scan data for {self.address}, using defaults")
-                self.device.name = "Petkit Water Fountain"
-                self.device.name_readable = "Petkit Water Fountain"
-                self.device.product_name = "Petkit BLE Water Fountain"
-                self.device.device_type = 14
-                self.device.type_code = 14
+            # The model, from the advertisement or from an earlier setup. If
+            # neither tells it, the polling loop keeps looking; no W5 is assumed.
+            if not self._identify_model():
+                _LOGGER.debug(
+                    "Model of %s not known yet, waiting for its advertisement",
+                    self.address,
+                )
 
             # Minimal BLE handshake
             await self.commands.get_device_details()
@@ -252,8 +261,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             await asyncio.sleep(0.75)
 
             # Read the settings (CMD 211); config writes wait for this answer.
-            await self.commands.get_device_config()
-            await asyncio.sleep(0.5)
+            if self._model_identified:
+                await self.commands.get_device_config()
+                await asyncio.sleep(0.5)
 
             # Fill in defaults for any uninitialized fields
             if self.device.serial == "Uninitialized":
@@ -326,6 +336,52 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
         self._reconnect_task = asyncio.create_task(_run())
 
+    def _identify_model(self) -> bool:
+        """Work out the fountain model; return True once it is known.
+
+        From the advertisement's model byte or Petkit name when it has one,
+        else from the name remembered from an earlier identification. Without
+        either the model stays unknown: guessing a W5 would parse a CTW3 with
+        the wrong layout and let config writes through to it.
+        """
+        if self._model_identified:
+            return True
+
+        connection = self.ble_manager.connectiondata.get(self.address)
+        name = getattr(connection, "name", None)
+        model_bytes = b""
+        if connection is not None:
+            model_bytes = Utils.combine_byte_arrays(
+                connection.details["props"]["ServiceData"]
+            )
+
+        if len(model_bytes) > 5 or is_supported_device_name(name):
+            self.commands.init_device_data()
+        elif stored_name := self.entry.data.get(CONF_MODEL_NAME):
+            properties = Utils.get_device_properties(None, stored_name)
+            self.device.name = properties["name"]
+            self.device.name_readable = properties["name"].replace("_", " ")
+            self.device.alias = properties["alias"]
+            self.device.product_name = properties["product_name"]
+            self.device.device_type = properties["device_type"]
+            self.device.type_code = properties["type_code"]
+        else:
+            return False
+
+        self._model_identified = True
+        _LOGGER.debug(
+            "Model identified: %s (type %s)", self.device.name, self.device.device_type
+        )
+        if (
+            is_supported_device_name(self.device.name)
+            and self.entry.data.get(CONF_MODEL_NAME) != self.device.name
+        ):
+            self.hass.config_entries.async_update_entry(
+                self.entry,
+                data={**self.entry.data, CONF_MODEL_NAME: self.device.name},
+            )
+        return True
+
     def _sync_device_registry(self) -> None:
         """Push the reported serial and firmware into the device registry.
 
@@ -345,6 +401,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             changes["serial_number"] = serial
         if self.device.firmware and entry.sw_version != str(self.device.firmware):
             changes["sw_version"] = str(self.device.firmware)
+        model = self.device.product_name
+        if self._model_identified and model and entry.model != model:
+            changes["model"] = model
         if changes:
             dev_reg.async_update_device(entry.id, **changes)
 
@@ -392,15 +451,23 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
         _LOGGER.debug("Polling device...")
 
+        if not self._model_identified:
+            await self.ble_manager.scan()
+            if self._identify_model():
+                self._sync_device_registry()
+
+        # The battery answer has one layout on every model and keeps the
+        # liveness check fed while the model is still unknown.
         await self.commands.get_battery()
         await asyncio.sleep(0.4)
-        await self.commands.get_device_state()
-        await asyncio.sleep(0.4)
-        await self.commands.get_device_update()
-        await asyncio.sleep(0.4)
-        # The status frames carry no child lock byte, so read the config too.
-        await self.commands.get_device_config()
-        await asyncio.sleep(0.4)
+        if self._model_identified:
+            await self.commands.get_device_state()
+            await asyncio.sleep(0.4)
+            await self.commands.get_device_update()
+            await asyncio.sleep(0.4)
+            # The status frames carry no child lock byte, so read the config too.
+            await self.commands.get_device_config()
+            await asyncio.sleep(0.4)
 
         # Device info (firmware/serial) is only fetched once at init. If that
         # handshake was interrupted (e.g. a flapping connection), re-fetch it
@@ -462,13 +529,19 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     def config_writable(self) -> bool:
         """Return True when a CMD 221 config write is safe to send."""
         return (
-            self.device.config_received
+            self._model_identified
+            and self.device.config_received
             and not self.is_ctw3
             and bool(self.ble_manager.connected_devices.get(self.address))
         )
 
     def _ensure_config_writable(self) -> None:
         """Refuse a config write that would send wrong or default settings."""
+        if not self._model_identified:
+            # Could still be a CTW3, whose config must not be written.
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="model_unknown"
+            )
         if self.is_ctw3:
             # The CTW3 reports its config in a different layout (battery work
             # and sleep times); the W4/W5 write layout would corrupt it.

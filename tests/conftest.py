@@ -56,6 +56,7 @@ def make_writable(coordinator) -> AsyncMock:
     client.disconnect = AsyncMock()
     coordinator.device.device_type = 14
     coordinator.device.name = "Petkit_W5"
+    coordinator._model_identified = True
     coordinator.ble_manager.connected_devices[ADDRESS] = client
     coordinator.device.config_received = True
     coordinator.ble_manager.message_producer = AsyncMock()

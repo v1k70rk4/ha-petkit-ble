@@ -10,6 +10,10 @@ DATA_UNDISCONNECTED = f"{DOMAIN}_undisconnected"
 # Configuration keys
 CONF_ADDRESS = "address"
 CONF_UPDATE_INTERVAL = "update_interval"
+# The Bluetooth name the fountain was last identified by (Petkit_W4X, ...).
+# Right after a restart a passive scanner has no name for it yet, and this
+# tells the model without waiting for one.
+CONF_MODEL_NAME = "model_name"
 
 # Default values
 DEFAULT_UPDATE_INTERVAL = 10  # seconds

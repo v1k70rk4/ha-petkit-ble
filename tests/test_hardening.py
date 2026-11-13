@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -13,9 +14,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import voluptuous as vol
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.petkit_ble.const import (
+    CONF_MODEL_NAME,
     DATA_UNDISCONNECTED,
     DOMAIN,
     SUPPORTED_NAME_PREFIXES,
@@ -666,3 +668,90 @@ def test_device_clock_counts_from_2000_utc():
     payload = Utils.time_in_bytes()
     assert len(payload) == 6
     assert int.from_bytes(bytes(payload[1:5]), "big") == pytest.approx(expected, abs=5)
+
+
+# A passive scanner has no name for the fountain right after a restart: Home
+# Assistant then reports the address as its name, and no service data.
+def _nameless_advertisement() -> SimpleNamespace:
+    return SimpleNamespace(name=ADDRESS, address=ADDRESS, rssi=-60, service_data={})
+
+
+async def test_scan_finds_the_configured_fountain_without_a_name(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    other = SimpleNamespace(
+        name="Petkit_W5", address="11:22:33:44:55:66", rssi=-60, service_data={}
+    )
+    with patch(
+        f"{ADAPTER}.bluetooth.async_discovered_service_info",
+        return_value=[_nameless_advertisement(), other],
+    ):
+        assert list(await coordinator.ble_manager.scan()) == [ADDRESS]
+
+
+async def test_model_is_not_guessed_from_a_nameless_advertisement(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    with patch(
+        f"{ADAPTER}.bluetooth.async_discovered_service_info",
+        return_value=[_nameless_advertisement()],
+    ):
+        await coordinator.ble_manager.scan()
+
+    assert coordinator._identify_model() is False
+    assert coordinator.device.device_type == 0
+
+    # Connected and with a config answer, a write is still refused.
+    client = MagicMock()
+    client.stop_notify = AsyncMock()
+    client.disconnect = AsyncMock()
+    coordinator.ble_manager.connected_devices[ADDRESS] = client
+    coordinator.device.config_received = True
+    assert coordinator.config_writable is False
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_update_config(led_switch=0)
+    assert err.value.translation_key == "model_unknown"
+
+
+async def test_unknown_model_is_only_asked_for_its_battery(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    client = MagicMock()
+    client.stop_notify = AsyncMock()
+    client.disconnect = AsyncMock()
+    coordinator.ble_manager.connected_devices[ADDRESS] = client
+    coordinator.ble_manager.message_producer = AsyncMock()
+    # Data arrived just now, so the liveness check starts no reconnect.
+    coordinator.ble_manager._last_notification = time.monotonic()
+    with patch(f"{ADAPTER}.bluetooth.async_discovered_service_info", return_value=[]):
+        await coordinator._poll_device()
+
+    sent = [call.args[0][3] for call in coordinator.ble_manager.message_producer.call_args_list]
+    assert 66 in sent
+    assert not {210, 211, 230} & set(sent)
+
+
+async def test_identified_model_is_remembered_for_the_next_setup(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    advertisement = SimpleNamespace(
+        name="Petkit_CTW3_100", address=ADDRESS, rssi=-60, service_data={}
+    )
+    with patch(
+        f"{ADAPTER}.bluetooth.async_discovered_service_info", return_value=[advertisement]
+    ):
+        await coordinator.ble_manager.scan()
+    assert coordinator._identify_model() is True
+    assert loaded_entry.data[CONF_MODEL_NAME] == "Petkit_CTW3_100"
+
+
+async def test_remembered_model_identifies_a_nameless_fountain(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    hass.config_entries.async_update_entry(
+        loaded_entry, data={**loaded_entry.data, CONF_MODEL_NAME: "Petkit_CTW3_100"}
+    )
+    with patch(
+        f"{ADAPTER}.bluetooth.async_discovered_service_info",
+        return_value=[_nameless_advertisement()],
+    ):
+        await coordinator.ble_manager.scan()
+
+    assert coordinator._identify_model() is True
+    assert coordinator.device.device_type == 24
+    assert coordinator.is_ctw3
