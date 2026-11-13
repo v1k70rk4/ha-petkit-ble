@@ -12,6 +12,8 @@ from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .const import DATA_UNDISCONNECTED
+
 _LOGGER = logging.getLogger(__name__)
 
 # After an unload: the waits, in seconds, before each further attempt to
@@ -53,8 +55,12 @@ class HABluetoothAdapter:
         self._closed = False
         # Clients whose disconnect() raised. One may still hold the fountain's
         # only connection, so it is kept here, never used as a connection, and
-        # disconnected again before the next connect and on unload.
-        self._undisconnected: list[Any] = []
+        # disconnected again before the next connect and on unload. The list
+        # lives in hass.data, per address: if it cannot be disconnected even
+        # after the unload, the adapter of the entry's next setup inherits it.
+        self._undisconnected: list[Any] = hass.data.setdefault(
+            DATA_UNDISCONNECTED, {}
+        ).setdefault(address, [])
         self._leftover_task: asyncio.Task | None = None
 
     # ── Public properties ──────────────────────────────────────────
@@ -259,7 +265,9 @@ class HABluetoothAdapter:
                         "Disconnect failed again: %s: %s", type(err).__name__, err
                     )
                     continue
-            self._undisconnected.remove(client)
+            # The list is shared with a closed adapter that may still retry.
+            if client in self._undisconnected:
+                self._undisconnected.remove(client)
         return not self._undisconnected
 
     async def disconnect_device(self, address: str) -> bool:
@@ -293,9 +301,12 @@ class HABluetoothAdapter:
             await asyncio.sleep(delay)
             if await self._retry_failed_disconnects():
                 return
+        # Still owned: it stays in hass.data, and the next setup of this
+        # address tries again before it connects.
         self.logger.warning(
-            "Could not disconnect from %s after unloading. If it cannot be reached "
-            "again, restart the Bluetooth adapter or Home Assistant",
+            "Could not disconnect from %s after unloading; the next setup tries "
+            "again. If it cannot be reached then, restart the Bluetooth adapter "
+            "or Home Assistant",
             self.address,
         )
 

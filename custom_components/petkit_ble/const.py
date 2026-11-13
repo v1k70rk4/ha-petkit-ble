@@ -2,6 +2,11 @@
 
 DOMAIN = "petkit_ble"
 
+# hass.data key: per Bluetooth address, the clients that could not be
+# disconnected. Kept outside the config entry's own data so that it outlives
+# an unload and the entry's next setup can disconnect them.
+DATA_UNDISCONNECTED = f"{DOMAIN}_undisconnected"
+
 # Configuration keys
 CONF_ADDRESS = "address"
 CONF_UPDATE_INTERVAL = "update_interval"

@@ -16,10 +16,12 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ServiceValidationError
 
 from custom_components.petkit_ble.const import (
+    DATA_UNDISCONNECTED,
     DOMAIN,
     SUPPORTED_NAME_PREFIXES,
     is_supported_device_name,
 )
+from custom_components.petkit_ble.ha_bluetooth_adapter import HABluetoothAdapter
 from custom_components.petkit_ble.PetkitW5BLEMQTT.commands import Commands
 from custom_components.petkit_ble.PetkitW5BLEMQTT.device import Device
 from custom_components.petkit_ble.PetkitW5BLEMQTT.event_handlers import EventHandlers
@@ -294,6 +296,58 @@ async def test_disconnect_that_fails_during_unload_is_retried_until_it_works(
     assert client.disconnect.await_count == 4
     assert adapter._undisconnected == []
     assert "Could not disconnect" not in caplog.text
+
+
+async def test_client_left_connected_after_unload_is_disconnected_on_the_next_setup(
+    hass, loaded_entry
+):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client = _client(OSError("busy"))
+    adapter.connected_devices[ADDRESS] = client
+
+    with patch(f"{ADAPTER}.LEFTOVER_DISCONNECT_DELAYS", (0.01,)):
+        assert await hass.config_entries.async_unload(loaded_entry.entry_id)
+        await adapter._leftover_task
+    # Twice during the unload, once more after it: every retry is used up.
+    assert client.disconnect.await_count == 3
+    del adapter
+
+    # Home Assistant still owns the client, with no adapter left to hold it.
+    assert hass.data[DATA_UNDISCONNECTED][ADDRESS] == [client]
+
+    client.disconnect = AsyncMock()
+    with patch(
+        "custom_components.petkit_ble.coordinator.PetkitBLECoordinator.async_start", AsyncMock()
+    ):
+        assert await hass.config_entries.async_setup(loaded_entry.entry_id)
+        await hass.async_block_till_done()
+    new_adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    assert new_adapter._undisconnected == [client]
+
+    new_client = _client()
+    with (
+        patch(f"{ADAPTER}.bluetooth.async_ble_device_from_address", return_value=MagicMock()),
+        patch(f"{ADAPTER}.establish_connection", AsyncMock(return_value=new_client)),
+    ):
+        assert await new_adapter.connect_device(ADDRESS) is True
+
+    # The old client is disconnected before the new connection is made.
+    client.disconnect.assert_awaited_once()
+    assert hass.data[DATA_UNDISCONNECTED][ADDRESS] == []
+    assert new_adapter.connected_devices[ADDRESS] is new_client
+
+
+async def test_adapters_of_other_fountains_do_not_share_failed_clients(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    other = HABluetoothAdapter(hass=hass, address="A4:C1:38:99:88:77", event_handler=MagicMock())
+    client = _client([OSError("busy"), None])
+    adapter.connected_devices[ADDRESS] = client
+    await adapter._disconnect_client(ADDRESS)
+
+    assert adapter._undisconnected == [client]
+    assert other._undisconnected == []
+    assert await other._retry_failed_disconnects() is True
+    assert client.disconnect.await_count == 1
 
 
 async def test_no_disconnect_retries_are_scheduled_while_the_entry_is_loaded(hass, loaded_entry):
