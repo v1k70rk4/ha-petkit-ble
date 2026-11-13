@@ -205,19 +205,36 @@ class HABluetoothAdapter:
                 )
             return False
 
+    async def _disconnect_client(self, address: str) -> bool:
+        """Disconnect the tracked client, then stop tracking it.
+
+        The client stays in connected_devices while its disconnect is awaited.
+        A task cancelled at that point (an unload during a reconnect) then
+        leaves it tracked, so the cleanup that follows can still disconnect
+        it; untracked, it would keep the fountain's only connection.
+        Returns False if the disconnect itself failed.
+        """
+        client = self.connected_devices.get(address)
+        if client is None:
+            return True
+        ok = True
+        try:
+            await client.disconnect()
+        except Exception as err:
+            ok = False
+            self.logger.debug("Disconnect failed: %s: %s", type(err).__name__, err)
+        # Only if it is still the tracked one: a reconnect may have replaced it.
+        if self.connected_devices.get(address) is client:
+            self.connected_devices.pop(address, None)
+        return ok
+
     async def disconnect_device(self, address: str) -> bool:
         """Disconnect from device."""
-        try:
-            client = self.connected_devices.pop(address, None)
-            if client and hasattr(client, 'disconnect'):
-                await client.disconnect()
-            self._set_status(ConnectionStatus.DISCONNECTED)
-            return True
-        except Exception as err:
-            self.connected_devices.pop(address, None)
-            self.logger.warning(f"Error during disconnect: {err}")
-            self._set_status(ConnectionStatus.DISCONNECTED)
-            return False
+        ok = await self._disconnect_client(address)
+        if not ok:
+            self.logger.warning("Error during disconnect")
+        self._set_status(ConnectionStatus.DISCONNECTED)
+        return ok
 
     # ── Read / Write ───────────────────────────────────────────────
 
@@ -231,12 +248,7 @@ class HABluetoothAdapter:
 
         if hasattr(client, 'is_connected') and not client.is_connected:
             self.logger.warning("Client stale, requesting reconnect")
-            stale = self.connected_devices.pop(address, None)
-            if stale:
-                try:
-                    await stale.disconnect()
-                except Exception:
-                    pass
+            await self._disconnect_client(address)
             self._set_status(ConnectionStatus.RECONNECTING)
             self._request_reconnect(address)
             return False
@@ -256,12 +268,7 @@ class HABluetoothAdapter:
             # Physically disconnect the dead client — popping alone leaves it
             # holding the device's single BLE connection slot as an untracked
             # ghost, which blocks every future reconnect until an HA restart.
-            stale = self.connected_devices.pop(address, None)
-            if stale:
-                try:
-                    await stale.disconnect()
-                except Exception:
-                    pass
+            await self._disconnect_client(address)
             self._set_status(ConnectionStatus.RECONNECTING)
             self._request_reconnect(address)
             return False
@@ -388,8 +395,11 @@ class HABluetoothAdapter:
     # ── Reconnection (single entry point) ──────────────────────────
 
     def _request_reconnect(self, address: str) -> None:
-        """Start a tracked background reconnect, unless the adapter is closed."""
-        if self._closed:
+        """Start a tracked background reconnect, unless the adapter is closed.
+
+        One at a time: while one is pending, further requests are covered by it.
+        """
+        if self._closed or any(not task.done() for task in self._background_tasks):
             return
         task = self.hass.async_create_background_task(
             self.ensure_connected(address), name=f"petkit_ble reconnect {address}"
@@ -424,12 +434,7 @@ class HABluetoothAdapter:
         reconnection loop again (and the attempt counter starts climbing).
         """
         self.logger.warning(f"💀 {address} unresponsive — forcing reconnect")
-        client = self.connected_devices.pop(address, None)
-        if client:
-            try:
-                await client.disconnect()
-            except Exception:
-                pass
+        await self._disconnect_client(address)
         self._set_status(ConnectionStatus.RECONNECTING)
         return await self.ensure_connected(address)
 
@@ -475,12 +480,7 @@ class HABluetoothAdapter:
                 # Connected but couldn't subscribe — tear it down and retry from
                 # scratch instead of declaring a false success.
                 self.logger.warning("Reconnected but notifications failed; tearing down to retry")
-                client = self.connected_devices.pop(address, None)
-                if client:
-                    try:
-                        await client.disconnect()
-                    except Exception:
-                        pass
+                await self._disconnect_client(address)
                 self._connection_attempts += 1
 
             delay = self._retry_delay()
@@ -494,12 +494,7 @@ class HABluetoothAdapter:
         """Full BLE stack reset — disconnect, discard client, re-discover device."""
         try:
             # Force disconnect stale client
-            client = self.connected_devices.pop(address, None)
-            if client:
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
+            await self._disconnect_client(address)
 
             # Discard cached BLE device reference so HA rediscovers it fresh
             self._ble_device = None

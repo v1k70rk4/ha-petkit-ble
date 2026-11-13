@@ -97,6 +97,92 @@ async def test_failed_initialization_cancels_background_reconnects(hass, loaded_
         assert len(_reconnect_tasks()) == 1
 
 
+async def test_reconnect_requests_share_one_pending_task(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    with patch.object(adapter, "connect_device", AsyncMock(return_value=False)):
+        for _ in range(5):
+            assert await adapter.write_characteristic(ADDRESS, "uuid", b"\x00") is False
+        await asyncio.sleep(0.05)
+        assert len(_reconnect_tasks()) == 1
+        assert len(adapter._background_tasks) == 1
+        await adapter.async_cancel_reconnects()
+        assert _reconnect_tasks() == []
+
+
+def _client_with_slow_first_disconnect() -> tuple[MagicMock, asyncio.Event]:
+    """A client whose first disconnect() hangs until the event is set."""
+    started = asyncio.Event()
+    calls = 0
+
+    async def disconnect():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            await asyncio.Event().wait()
+
+    client = MagicMock()
+    client.is_connected = True
+    client.stop_notify = AsyncMock()
+    client.disconnect = AsyncMock(side_effect=disconnect)
+    return client, started
+
+
+async def test_client_stays_tracked_when_its_disconnect_is_cancelled(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client, started = _client_with_slow_first_disconnect()
+    adapter.connected_devices[ADDRESS] = client
+
+    task = asyncio.create_task(adapter.force_reconnect(ADDRESS))
+    await started.wait()
+    await _cancel([task])
+
+    # Still tracked, so it can be disconnected for real.
+    assert adapter.connected_devices[ADDRESS] is client
+    assert await adapter.disconnect_device(ADDRESS) is True
+    assert ADDRESS not in adapter.connected_devices
+    assert client.disconnect.await_count == 2
+
+
+async def test_unload_during_a_reconnect_teardown_still_disconnects(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client, started = _client_with_slow_first_disconnect()
+
+    async def connect(address):
+        adapter.connected_devices[address] = client
+        return True
+
+    # Connected, but the notifications cannot be subscribed: the reconnect
+    # loop tears the link down again, and the unload arrives in the middle.
+    with (
+        patch.object(adapter, "connect_device", AsyncMock(side_effect=connect)),
+        patch.object(adapter, "start_notifications", AsyncMock(return_value=False)),
+    ):
+        adapter._request_reconnect(ADDRESS)
+        await started.wait()
+        assert await hass.config_entries.async_unload(loaded_entry.entry_id)
+
+    assert ADDRESS not in adapter.connected_devices
+    assert client.disconnect.await_count == 2
+    assert _reconnect_tasks() == []
+
+
+async def test_disconnect_does_not_drop_a_newer_client(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    old_client, new_client = MagicMock(), MagicMock()
+
+    async def disconnect():
+        adapter.connected_devices[ADDRESS] = new_client
+
+    old_client.disconnect = AsyncMock(side_effect=disconnect)
+    new_client.stop_notify = AsyncMock()
+    new_client.disconnect = AsyncMock()
+    adapter.connected_devices[ADDRESS] = old_client
+
+    await adapter._disconnect_client(ADDRESS)
+    assert adapter.connected_devices[ADDRESS] is new_client
+
+
 # -- An absent fountain must not fill the log ---------------------------------
 
 
@@ -256,6 +342,48 @@ def test_short_service_data_falls_back_to_an_unknown_model():
     Commands(ble_manager=ble, device=device, logger=logging.getLogger("test")).init_device_data()
     assert device.product_name == "Petkit BLE Water Fountain"
     assert device.device_type == 0
+
+
+def _init_from_advertisement(device: Device, name: str | None, service_data: bytes) -> None:
+    ble = MagicMock()
+    ble.connectiondata = {
+        ADDRESS: SimpleNamespace(
+            name=name, details={"props": {"RSSI": -60, "ServiceData": {"x": service_data}}}
+        )
+    }
+    Commands(ble_manager=ble, device=device, logger=logging.getLogger("test")).init_device_data()
+
+
+def test_short_service_data_keeps_an_identified_model():
+    device = Device(ADDRESS)
+    _init_from_advertisement(device, "Petkit_CTW3", bytes([0, 0, 0, 0, 0, 223]))
+    assert device.device_type == 24
+
+    _init_from_advertisement(device, None, b"\x01\x02")
+    assert device.name == "Petkit_CTW3"
+    assert device.device_type == 24
+    assert Parsers._is_ctw3({"device_type": device.device_type, "name": device.name})
+
+
+@pytest.mark.parametrize(
+    ("name", "device_type", "product_name"),
+    [("Petkit_CTW3_100", 24, "Eversweet Max 2"), ("Petkit_W4X", 14, "Eversweet 3 Pro")],
+)
+def test_short_service_data_falls_back_to_the_advertised_name(name, device_type, product_name):
+    device = Device(ADDRESS)
+    _init_from_advertisement(device, name, b"\x01\x02")
+    assert device.name == name
+    assert device.device_type == device_type
+    assert device.product_name == product_name
+
+
+def test_unknown_ctw3_variant_is_still_parsed_as_a_ctw3():
+    device = Device(ADDRESS)
+    _init_from_advertisement(device, "Petkit_CTW3_NEW", b"\x01\x02")
+    assert device.device_type == 0
+    assert Parsers._is_ctw3({"device_type": device.device_type, "name": device.name})
+    # CTW3 layout: a 12 byte W4/W5 state frame is too short for it.
+    assert "error" in Parsers.device_state(bytes(12), {"device_type": 0, "name": device.name})
 
 
 @pytest.mark.parametrize(

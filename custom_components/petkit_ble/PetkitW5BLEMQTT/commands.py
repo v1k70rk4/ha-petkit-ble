@@ -15,17 +15,26 @@ class Commands:
             self.sequence = 0
     
     def init_device_data(self):
-        connectiondata = self.ble_manager.connectiondata[self.device.mac].details
+        connection = self.ble_manager.connectiondata[self.device.mac]
+        connectiondata = connection.details
         self.device.status = {"rssi": connectiondata['props']['RSSI']}
         
         discovered_bytes = Utils.bytes_to_unsigned_integers(Utils.combine_byte_arrays(connectiondata['props']['ServiceData']))
-        # Advertisement data is untrusted: a short one maps to the unknown model
-        # instead of failing every initialization attempt.
+        # Advertisement data is untrusted: a short one must not fail every
+        # initialization attempt.
         device_integer_identifier = discovered_bytes[5] if len(discovered_bytes) > 5 else None
 
         self.logger.debug(f"Received ServiceData {discovered_bytes}")
-        
-        device_properties = Utils.get_device_properties(device_integer_identifier)
+
+        if device_integer_identifier is None and self.device.device_type:
+            # A model identified on an earlier connection stands: incomplete
+            # data must not turn a CTW3 into an unknown model, which would be
+            # parsed with the W4/W5 layout.
+            return
+
+        device_properties = Utils.get_device_properties(
+            device_integer_identifier, getattr(connection, "name", None)
+        )
 
         self.device.name = device_properties['name']
         self.device.name_readable = device_properties['name'].replace("_", " ") # Replace _ with space

@@ -203,7 +203,7 @@ class Utils:
         return filter_time_left, water_purified, water_purified_today, energy_consumed
     
     @staticmethod
-    def get_device_properties(device_integer_identifier):
+    def get_device_properties(device_integer_identifier, advertised_name=None):
         device_mapping = {
             205: {"name": "Petkit_W5C", "alias": "W5C", "product_name": "Eversweet Mini", "device_type": 14, "type_code": 2},
             206: {"name": "Petkit_W5", "alias": "W5", "product_name": "Eversweet Mini", "device_type": 14, "type_code": 1},
@@ -218,14 +218,22 @@ class Utils:
             249: {"name": "Petkit_CTW3UV_100", "alias": "W4X", "product_name": "Eversweet Max 2", "device_type": 24, "type_code": 4}
         }
 
-        return device_mapping.get(
-            device_integer_identifier,
-            {
-                "name": f"Petkit_Unknown_{device_integer_identifier}",
-                "alias": "Unknown",
-                "product_name": "Petkit BLE Water Fountain",
-                "device_type": 0,
-                "type_code": 0,
-            },
-        )
+        if device_integer_identifier in device_mapping:
+            return device_mapping[device_integer_identifier]
+
+        # No usable model byte: the fountain advertises its model as its name
+        # too (Petkit_CTW3_100, ...), so try that before giving up.
+        for properties in device_mapping.values():
+            if properties["name"] == advertised_name:
+                return properties
+
+        # Unknown model. Keeping the advertised name keeps a CTW3 recognisable
+        # by it, so it is not parsed with the W4/W5 layout.
+        return {
+            "name": advertised_name or f"Petkit_Unknown_{device_integer_identifier}",
+            "alias": "Unknown",
+            "product_name": "Petkit BLE Water Fountain",
+            "device_type": 0,
+            "type_code": 0,
+        }
         
