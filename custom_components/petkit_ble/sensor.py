@@ -354,20 +354,14 @@ class PetkitLastSeenSensor(PetkitSensorBase):
     @property
     def native_value(self) -> datetime | None:
         """Return the last seen timestamp."""
+        # The adapter stores it as an ISO 8601 string with the time zone.
         last_seen = self.coordinator.current_data.get("status", {}).get("last_seen")
-        if last_seen:
-            # Handle both timestamp (float) and ISO string formats for backward compatibility
-            if isinstance(last_seen, str):
-                try:
-                    from datetime import datetime as dt
-                    # Parse ISO format string to datetime
-                    return dt.fromisoformat(last_seen.replace('Z', '+00:00'))
-                except (ValueError, AttributeError):
-                    return None
-            else:
-                # Legacy numeric timestamp format
-                return datetime.fromtimestamp(last_seen)
-        return None
+        if not last_seen:
+            return None
+        try:
+            return datetime.fromisoformat(last_seen)
+        except (TypeError, ValueError):
+            return None
 
 
 class PetkitFirmwareSensor(PetkitSensorBase):

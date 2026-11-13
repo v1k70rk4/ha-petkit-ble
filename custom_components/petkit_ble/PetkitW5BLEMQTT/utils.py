@@ -1,12 +1,9 @@
 # PetkitW5BLE/utils.py
 import time
 import math
-import ctypes
 from datetime import datetime, timezone
 
 class Utils:
-    def __init__(self):
-        pass
 
     @staticmethod
     def build_command(seq: int, cmd: int, type: int, data: list[int]) -> bytearray:
@@ -42,45 +39,7 @@ class Utils:
             "end_byte": byte_array[-1]
         }
         
-    @staticmethod
-    def remove_non_matching_entries(original_dict, matching_name):
-        filtered_dict = {key: value for key, value in original_dict.items() if key == matching_name}
-        return filtered_dict
-
-    @staticmethod
-    def split_into_bytes(short_value): 
-        short = ctypes.c_short(short_value) 
-        byte1 = (short.value >> 8) & 0xFF 
-        byte2 = short.value & 0xFF 
-        return byte1, byte2
-    
-    #@staticmethod
-    #def split_into_bytes(value):
-    #    # Ensure the value is a float
-    #    if not isinstance(value, (float, int)):
-    #        raise TypeError("Value must be an integer or float")
-    #    
-    #    # Pack the float value into 2 bytes using 'e' format for 16-bit float
-    #    byte_data = struct.pack('e', float(value))
-    #    
-    #    # Split the packed data into two bytes
-    #    byte1, byte2 = byte_data[0], byte_data[1]
-    #    
-    #    return byte1, byte2
-
-    # HEX string functions
-    @staticmethod
-    def to_ascii(hex_string: str) -> str:
-        return ''.join(chr(b) for b in hex_string)
-
-    @staticmethod
-    def trim_hex(hex_string: str) -> str:
-        return hex_string[6:-2] # Return only the raw data bytes - including type, sequence, lenght and data start@staticmethod
-    
     # Byte manipulation
-    @staticmethod
-    def unsigned_to_byte(value: str):
-        return value.to_bytes(1, byteorder='big', signed=False)
 
     @staticmethod
     def byte_to_integer(byte):
@@ -95,10 +54,6 @@ class Utils:
         return int.from_bytes(bytes, byteorder=byteorder, signed=True)
 
     @staticmethod
-    def bytes_to_long(bytes, byteorder='big'):
-        return int.from_bytes(bytes, byteorder=byteorder)
-        
-    @staticmethod
     def bytes_to_unsigned_integers(byte_array):
         return [b for b in byte_array]
         
@@ -112,17 +67,6 @@ class Utils:
     @staticmethod
     def pad_array(data, target_length):
         return [0] * (target_length - len(data)) + data
-    
-    @staticmethod
-    # String functions
-    def reverse_integer_and_append_bytes(integer_value):
-        # Reverse the integer by converting it to string, reversing, and converting back to int
-        reversed_integer = int(str(integer_value)[::-1])
-        # Convert the reversed integer to bytes (big-endian)
-        reversed_bytes = reversed_integer.to_bytes((reversed_integer.bit_length() + 7) // 8, byteorder='big')
-        # Append 1337 in hex to the end
-        appended_bytes = reversed_bytes + bytearray.fromhex('1337')
-        return appended_bytes
     
     @staticmethod
     def reverse_unsigned_array(array):
@@ -193,20 +137,7 @@ class Utils:
         minutes = minutes % 60 
         return f"{hours:02d}:{minutes:02d}"
         
-    def time_to_minutes(time_str):
-        # Split the input string into hours and minutes
-        hour, minute = map(int, time_str.split(':'))
-        # Calculate the total minutes
-        total_minutes = hour * 60 + minute
-        return total_minutes
-
     # Extract data functions
-    @staticmethod
-    def trim_data(data):
-        # Trim away the header and end bytes (fa, fc, fd, fb)
-        if data[:3] == b'\xfa\xfc\xfd' and data[-1] == b'\xfb':
-            return data[3:-1]
-        return data
 
     @staticmethod
     def extract_device_id(data):
@@ -219,30 +150,6 @@ class Utils:
         bytes = data[8:23]  # Extract next 14 bytes for serial number
         serial_number = ''.join(chr(b) for b in bytes)
         return serial_number
-
-    # measureTime - w5record
-    @staticmethod
-    def calculate_filtered_water_today(alias, pump_runtime, filter_time_left):
-        resources = "days" if filter_time_left > 1 else "day"
-        time_text = f"{filter_time_left} {resources}"
-        print(time_text)
-
-        canculate_wx_energy_for_type = 0
-        canculate_wx_energy_for_type2 = 0.0
-
-        canculate_wx_energy_for_type = int(Utils.canculate_wx_energy_for_type(alias, 1, pump_runtime))
-        canculate_wx_energy_for_type2 = Utils.canculate_wx_energy_for_type(alias, 2, pump_runtime)
-
-        if canculate_wx_energy_for_type < 0:
-            canculate_wx_energy_for_type = 0
-
-        purified_water_text = f"{max(canculate_wx_energy_for_type2, 0.0)}"
-        if canculate_wx_energy_for_type > 1:
-            purified_water_text += " times"
-        else:
-            purified_water_text += " time"
-        
-        return purified_water_text
 
     # canculateWxEnergyForType
     # device.alias, device.type_code, 
@@ -322,13 +229,3 @@ class Utils:
             },
         )
         
-    @staticmethod
-    def decimal_to_time(decimal_time):
-        # Extract the integer part (hours) and the decimal part
-        hours = int(decimal_time)
-        decimal_minutes = decimal_time - hours
-
-        # Convert the decimal part to minutes (out of 60)
-        minutes = int(decimal_minutes * 60)
-
-        return f"{hours:02d}:{minutes:02d}"

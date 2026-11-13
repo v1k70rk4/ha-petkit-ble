@@ -21,15 +21,11 @@
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to the device. Please make sure it's powered on and within range.",
-      "invalid_address": "This is not a Bluetooth address. Use the form AA:BB:CC:DD:EE:FF.",
-      "unknown": "An unknown error occurred."
+      "invalid_address": "This is not a Bluetooth address. Use the form AA:BB:CC:DD:EE:FF."
     },
     "abort": {
       "already_configured": "This device is already configured.",
-      "no_devices_found": "No Petkit BLE devices were found. Please make sure your device is powered on and in pairing mode.",
-      "not_supported": "This device is not a supported Petkit water fountain.",
-      "cannot_connect": "Unable to connect to the device."
+      "not_supported": "This device is not a supported Petkit water fountain."
     }
   },
   "options": {

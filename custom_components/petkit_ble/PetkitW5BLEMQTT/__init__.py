@@ -1,20 +1,16 @@
-from .ble_manager import BLEManager
+"""Petkit fountain BLE protocol: frames, commands, parsers and the device state."""
+from .commands import Commands
+from .constants import Constants
 from .device import Device
 from .event_handlers import EventHandlers
-from .logger import Logger
-from .utils import Utils
-from .constants import Constants
 from .parsers import Parsers
-# Previously: MQTT modules (MQTTPayloads, MQTTClient, MQTTCallback) imported here
-from .commands import Commands
+from .utils import Utils
 
 __all__ = [
-    "BLEManager",
     "Commands",
     "Constants",
     "Device",
     "EventHandlers",
-    "Logger",
     "Parsers",
     "Utils",
 ]

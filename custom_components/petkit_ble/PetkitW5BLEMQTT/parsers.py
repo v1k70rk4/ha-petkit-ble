@@ -24,11 +24,6 @@ class Parsers:
             "battery": data[2]
         }
 
-    # Init data
-    @staticmethod
-    def device_init(data, alias):
-        return {"serial": Utils.bytes_to_long(data[7:11])}
-
     # Synchronize data
     @staticmethod
     def device_synchronization(data, alias):

@@ -8,7 +8,6 @@ class Device:
         self.device_id = 0
         self.device_id_bytes = []
         self.serial = "Uninitialized"
-        self.secret = [0, 0, 0, 0, 0, 0, 13, 37]
         self.mac = address
         self.mac_readable = address.replace(":", "") # Replace : with nothing
         self.name = "Uninitialized"
@@ -19,7 +18,7 @@ class Device:
         self.device_type = 0
         self.type_code = 0
         self.rssi = 0
-        # Connection tracking (will be set by BLEManager)
+        # Connection tracking (set by the Bluetooth adapter)
         self._ble_manager = None
         self._mac_readable = self.mac_readable
         self._name_readable = self.name_readable

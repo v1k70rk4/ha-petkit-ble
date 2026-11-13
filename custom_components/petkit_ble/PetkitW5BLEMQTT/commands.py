@@ -1,4 +1,3 @@
-import asyncio
 from .utils import Utils
 
 class Commands:
@@ -35,45 +34,6 @@ class Commands:
         self.device.device_type = device_properties['device_type']
         self.device.type_code = device_properties['type_code']
     
-    async def init_device_connection(self):
-        # Basically this function secures the sequence
-        # of which we're sending the commands.
-        # At the same time, we're ensuring we're getting
-        # the necessary parameters registered - e.g. serial
-        await self.get_device_details()
-        await asyncio.sleep(1.5)
-        
-        await self.init_device()
-        
-        await self.get_device_sync()
-        await asyncio.sleep(0.75)
-        await self.set_datetime()
-        await asyncio.sleep(0.75)
-        
-        while self.device.serial in "Uninitialized" or self.device.serial == 0:
-            await self.get_device_details()
-            await asyncio.sleep(1.5)
-        
-        if not self.device.device_initialized:
-            await self.init_device()
-            await asyncio.sleep(3.0)
-            
-            await self.ble_manager.disconnect_device(self.mac)
-            await asyncio.sleep(1.0)
-            await self.ble_manager.connect_device(self.mac)
-            await asyncio.sleep(1.0)
-            await self.init_device_connection()
-
-        await self.get_device_info()
-        await asyncio.sleep(0.75)
-        await self.get_device_type()
-        await asyncio.sleep(0.75)
-        await self.get_battery()
-        await asyncio.sleep(0.75)
-        await self.get_device_state()
-        await asyncio.sleep(0.75)
-        await self.get_device_config()
-
     async def get_battery(self):
         cmd = 66                            # Command for getting device details
         type = 1                            # Sending 1
@@ -131,37 +91,8 @@ class Commands:
         self.logger.debug("Queued command: %s", cmd)
         return
 
-    async def get_device_sync(self):
-        cmd = 86                            # Command for getting device details
-        type = 1                            # Type is 1 for sending - 2 for receiving
-        seq = self.sequence                 # Example sequence number
-        #data = [0, 0, 253, 54, 124, 210, 241, 44]   # What's going on here?
-        data = [0, 0] + self.secret         # What's going on here?
-        
-        bytes = Utils.build_command(seq, cmd, type, data)
-        await self.ble_manager.message_producer(bytes)
-        
-        self.increment_sequence()
-        
-        self.logger.debug("Queued command: %s", cmd)
-        return
-
     async def get_device_info(self):
         cmd = 200                           # Command for getting device details
-        type = 1                            # Type is 1 for sending - 2 for receiving
-        seq = self.sequence                 # Example sequence number
-        data = [] 
-        
-        bytes = Utils.build_command(seq, cmd, type, data)
-        await self.ble_manager.message_producer(bytes)
-        
-        self.increment_sequence()
-        
-        self.logger.debug("Queued command: %s", cmd)
-        return
-        
-    async def get_device_type(self):
-        cmd = 201                           # Command for getting device details
         type = 1                            # Type is 1 for sending - 2 for receiving
         seq = self.sequence                 # Example sequence number
         data = [] 
@@ -221,14 +152,6 @@ class Commands:
         self.logger.debug("Queued command: %s", cmd)
         return
     
-    # Not used -- maybe never
-    async def set_light_setting(self):
-        return
-
-    # Not used -- maybe never
-    async def set_dnd_setting(self):
-        return
-
     async def set_device_mode(self, state, mode):
         cmd = 220                           # Command for getting device details
         type = 1                            # Type is 1 for sending - 2 for receiving
@@ -272,14 +195,6 @@ class Commands:
         self.logger.debug("Queued command: %s", cmd)
         return
 
-
-    # Not used -- maybe never
-    async def set_updated_light(self):
-        return
-
-    # Not used -- maybe never
-    async def set_updated_dnd(self):
-        return
         
     async def get_device_update(self):
         cmd = 230                           # Command for getting device details

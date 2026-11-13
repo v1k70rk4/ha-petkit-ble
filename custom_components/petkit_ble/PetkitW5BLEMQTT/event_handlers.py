@@ -9,7 +9,6 @@ class EventHandlers:
         # Registry of command values to handler methods
         self.handlers = {
             66: Parsers.device_battery,
-            #73: Parsers.device_init,
             86: Parsers.device_synchronization,
             200: Parsers.device_firmware,
             210: Parsers.device_state,
@@ -17,8 +16,6 @@ class EventHandlers:
             213: Parsers.device_identifiers,
             230: Parsers.device_status,
         }
-
-        # Previously: Messages were forwarded to MQTT for Home Assistant integration
 
     def _parser_context(self):
         return {
@@ -70,7 +67,5 @@ class EventHandlers:
             # byte included) makes them safe; a short one blocks them again.
             if cmd == 211:
                 self.device.config_received = data.get("is_locked") is not None
-                
-        # Previously: Device status forwarded to MQTT when cmd in [220, 221, 230]
-        
+
         return parsed_data

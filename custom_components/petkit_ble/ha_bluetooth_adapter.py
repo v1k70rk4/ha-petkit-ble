@@ -32,10 +32,8 @@ class HABluetoothAdapter:
         self.event_handler = event_handler
         self.logger = logger or _LOGGER
         self.connected_devices: dict[str, Any] = {}
-        self.available_devices: dict[str, Any] = {}
         self.connectiondata: dict[str, Any] = {}
         self.queue: asyncio.Queue = asyncio.Queue(10)
-        self._client = None
         self._ble_device = None
 
         # Connection state
@@ -45,7 +43,6 @@ class HABluetoothAdapter:
         self._connection_attempts = 0
         self._connection_error: str | None = None
         self._reconnect_lock = asyncio.Lock()
-        self._reconnection_active = False
         # Reconnects started from the write path. They are tracked so that an
         # unload can cancel them; an untracked one would keep reconnecting and
         # hold the fountain's only connection after the entry is gone.
@@ -103,7 +100,6 @@ class HABluetoothAdapter:
                     petkit_devices[info.address] = mock
                     self.connectiondata[info.address] = mock
 
-            self.available_devices = petkit_devices
             for addr, dev in petkit_devices.items():
                 self.logger.debug("Found device: %s (%s)", dev.name, addr)
             return petkit_devices
@@ -162,7 +158,7 @@ class HABluetoothAdapter:
                 getattr(self._ble_device, "details", None),
                 address.lower(),
             )
-            self._client = await establish_connection(
+            client = await establish_connection(
                 BleakClient, self._ble_device, address.lower(), timeout=10.0,
                 disconnected_callback=_on_disconnect,
             )
@@ -180,7 +176,7 @@ class HABluetoothAdapter:
             # Settings may have changed while the link was down; config writes
             # wait for a fresh CMD 211 answer on this connection.
             self.event_handler.device.config_received = False
-            self.connected_devices[address] = self._client
+            self.connected_devices[address] = client
             self._set_status(ConnectionStatus.CONNECTED)
             self._touch()
             self.logger.info(
@@ -224,19 +220,6 @@ class HABluetoothAdapter:
             return False
 
     # ── Read / Write ───────────────────────────────────────────────
-
-    async def read_characteristic(self, address: str, characteristic_uuid: str) -> bytes | None:
-        """Read a GATT characteristic."""
-        client = self.connected_devices.get(address)
-        if not client:
-            self.logger.debug(f"Device {address} not connected for read")
-            return None
-        try:
-            data = await client.read_gatt_char(characteristic_uuid)
-            return data
-        except Exception as err:
-            self.logger.error(f"Read failed ({characteristic_uuid}): {err}")
-            return None
 
     async def write_characteristic(self, address: str, characteristic_uuid: str, data: bytes) -> bool:
         """Write a GATT characteristic. Triggers reconnection on failure."""
@@ -447,7 +430,6 @@ class HABluetoothAdapter:
                 await client.disconnect()
             except Exception:
                 pass
-        self._client = None
         self._set_status(ConnectionStatus.RECONNECTING)
         return await self.ensure_connected(address)
 
@@ -464,11 +446,7 @@ class HABluetoothAdapter:
                 return bool(self.connected_devices.get(address))
 
         async with self._reconnect_lock:
-            self._reconnection_active = True
-            try:
-                return await self._reconnection_loop(address)
-            finally:
-                self._reconnection_active = False
+            return await self._reconnection_loop(address)
 
     async def _reconnection_loop(self, address: str) -> bool:
         """Attempt reconnection with progressive delays and periodic BLE reset."""
@@ -524,7 +502,6 @@ class HABluetoothAdapter:
                     pass
 
             # Discard cached BLE device reference so HA rediscovers it fresh
-            self._client = None
             self._ble_device = None
 
             # Re-scan to get a fresh BLE device handle from HA's bluetooth stack
@@ -548,12 +525,6 @@ class HABluetoothAdapter:
         # After 50+ attempts, slow down significantly to avoid hammering
         return 15.0
 
-    # ── Heartbeat (no-op, polling handled by coordinator) ──────────
-
-    async def heartbeat(self, interval: int) -> None:
-        """No-op — polling is handled by the coordinator."""
-        pass
-
     # ── Internal helpers ───────────────────────────────────────────
 
     def _set_status(self, status: ConnectionStatus, error: str | None = None):
@@ -569,8 +540,3 @@ class HABluetoothAdapter:
         """Update last-seen timestamp."""
         self._last_seen = dt_util.now().isoformat()
 
-    def reset_connection_state(self):
-        """Reset connection tracking for a clean restart."""
-        self._connection_status = ConnectionStatus.DISCONNECTED
-        self._connection_attempts = 0
-        self._connection_error = None

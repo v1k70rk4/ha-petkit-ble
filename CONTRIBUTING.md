@@ -26,7 +26,7 @@ Before you open it:
 - **The tests pass:** `python -m pytest`, see [`tests/README.md`](tests/README.md). A bug fix comes with a test that fails without it.
 - **Test it on a real fountain** and say which model and firmware you used. The tests run without a device, so they cannot tell how a real one behaves.
 - **Mind the BLE rules** in [`.github/copilot-instructions.md`](.github/copilot-instructions.md): the fountain takes one connection at a time, and every awaited BLE call needs a timeout. They come from real failures.
-- **Changes to the device protocol** go into the vendored copy in `custom_components/petkit_ble/PetkitW5BLEMQTT/`, not the top-level `PetkitW5BLEMQTT/`.
+- **Changes to the device protocol** go into `custom_components/petkit_ble/PetkitW5BLEMQTT/`.
 - **Text the user sees** goes into every file under `custom_components/petkit_ble/translations/` under the same key. If you don't speak a language, put the English text there and say so in the pull request.
 - **Leave the version numbers and the changelog alone.** They are updated when a release is made.
 

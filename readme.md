@@ -309,6 +309,7 @@ MIT — see [LICENSE](LICENSE) for details.
 ## Credits
 
 - Originally based on [pdiegmann/ha-petkit-ble](https://github.com/pdiegmann/ha-petkit-ble) — extensively reworked with new entity types, device capability detection, multi-language support, and expanded device compatibility
+- The protocol code in `custom_components/petkit_ble/PetkitW5BLEMQTT/` comes from [slespersen/PetkitW5BLEMQTT](https://github.com/slespersen/PetkitW5BLEMQTT)
 - Inspired by [RobertD502's Petkit integration](https://github.com/RobertD502/homeassistant-petkit) and [petkitaio](https://github.com/RobertD502/petkitaio)
 - BLE protocol analysis from [PetKit Eversweet Pro 3 research](https://colab.research.google.com/drive/1gWwLz1Wi_WujvvSaTJpPMW5i3YideSAb)
 - Dutch & Ukrainian translations based on [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit)
