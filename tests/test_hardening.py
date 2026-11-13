@@ -30,6 +30,7 @@ from custom_components.petkit_ble.sensor import PetkitPumpRuntimeSensor
 from .conftest import ADDRESS, frame, make_writable, registry_device_id, w5_status_payload
 
 INTEGRATION = Path(__file__).parent.parent / "custom_components" / "petkit_ble"
+ADAPTER = "custom_components.petkit_ble.ha_bluetooth_adapter"
 LOGGER_NAME = "custom_components.petkit_ble"
 DAY = 86400
 W5 = {"alias": "W5", "device_type": 14, "name": "Petkit_W5"}
@@ -181,6 +182,82 @@ async def test_disconnect_does_not_drop_a_newer_client(hass, loaded_entry):
 
     await adapter._disconnect_client(ADDRESS)
     assert adapter.connected_devices[ADDRESS] is new_client
+
+
+def _client(disconnect_side_effect=None) -> MagicMock:
+    client = MagicMock()
+    client.is_connected = True
+    client.stop_notify = AsyncMock()
+    client.disconnect = AsyncMock(side_effect=disconnect_side_effect)
+    return client
+
+
+async def test_failed_disconnect_is_retried_before_the_next_connect(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client = _client([OSError("busy"), None])
+    adapter.connected_devices[ADDRESS] = client
+
+    assert await adapter._disconnect_client(ADDRESS) is False
+    # Not taken for a working link any more, and not forgotten either.
+    assert ADDRESS not in adapter.connected_devices
+    assert adapter._undisconnected == [client]
+    assert await adapter.write_characteristic(ADDRESS, "uuid", b"\x00") is False
+    await adapter.async_cancel_reconnects()
+    client.write_gatt_char.assert_not_called()
+
+    new_client = _client()
+    with (
+        patch(f"{ADAPTER}.bluetooth.async_ble_device_from_address", return_value=MagicMock()),
+        patch(f"{ADAPTER}.establish_connection", AsyncMock(return_value=new_client)),
+    ):
+        assert await adapter.connect_device(ADDRESS) is True
+
+    assert client.disconnect.await_count == 2
+    assert adapter._undisconnected == []
+    assert adapter.connected_devices[ADDRESS] is new_client
+
+
+async def test_unload_retries_a_failed_disconnect(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client = _client([OSError("busy"), None])
+    adapter.connected_devices[ADDRESS] = client
+
+    assert await hass.config_entries.async_unload(loaded_entry.entry_id)
+
+    assert client.disconnect.await_count == 2
+    assert adapter._undisconnected == []
+    assert ADDRESS not in adapter.connected_devices
+
+
+async def test_unload_retries_a_disconnect_that_failed_earlier(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client = _client([OSError("busy"), None])
+    adapter.connected_devices[ADDRESS] = client
+    await adapter._disconnect_client(ADDRESS)
+    assert adapter._undisconnected == [client]
+
+    # Nothing is tracked as connected, so only the adapter's close can do it.
+    assert await hass.config_entries.async_unload(loaded_entry.entry_id)
+
+    assert client.disconnect.await_count == 2
+    assert adapter._undisconnected == []
+
+
+async def test_disconnect_that_keeps_failing_is_reported_and_kept(hass, loaded_entry):
+    adapter = hass.data[DOMAIN][loaded_entry.entry_id].ble_manager
+    client = _client(OSError("busy"))
+    adapter.connected_devices[ADDRESS] = client
+
+    assert await adapter.disconnect_device(ADDRESS) is False
+    assert ADDRESS not in adapter.connected_devices
+    assert adapter._undisconnected == [client]
+    assert adapter.connection_status == "disconnected"
+
+    # Once the link is gone by itself there is nothing left to disconnect.
+    client.is_connected = False
+    assert await adapter._retry_failed_disconnects() is True
+    assert adapter._undisconnected == []
+    assert client.disconnect.await_count == 2
 
 
 # -- An absent fountain must not fill the log ---------------------------------
@@ -384,6 +461,47 @@ def test_unknown_ctw3_variant_is_still_parsed_as_a_ctw3():
     assert Parsers._is_ctw3({"device_type": device.device_type, "name": device.name})
     # CTW3 layout: a 12 byte W4/W5 state frame is too short for it.
     assert "error" in Parsers.device_state(bytes(12), {"device_type": 0, "name": device.name})
+
+
+async def _scan_and_identify(coordinator, name: str, service_data: dict) -> Device:
+    """Run the adapter's scan on one advertisement, then the model detection."""
+    advertisement = SimpleNamespace(name=name, address=ADDRESS, rssi=-60, service_data=service_data)
+    with patch(f"{ADAPTER}.bluetooth.async_discovered_service_info", return_value=[advertisement]):
+        assert ADDRESS in await coordinator.ble_manager.scan()
+    coordinator.commands.init_device_data()
+    return coordinator.device
+
+
+@pytest.mark.parametrize(
+    ("name", "device_type"),
+    [("Petkit_CTW3", 24), ("Petkit_CTW3UV_100", 24), ("Petkit_W5", 14), ("Petkit_W4XUVC", 14)],
+)
+async def test_scan_without_service_data_identifies_the_model_by_name(hass, loaded_entry, name, device_type):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    device = await _scan_and_identify(coordinator, name, {})
+    assert device.name == name
+    assert device.device_type == device_type
+    assert coordinator.is_ctw3 is (device_type == 24)
+
+
+async def test_scan_without_service_data_keeps_a_known_ctw3_on_reconnect(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    full = {"0000c1a4-0000-1000-8000-00805f9b34fb": bytes([0x38, 0x00, 0x11, 0x22, 0x00, 247])}
+    device = await _scan_and_identify(coordinator, "Petkit_CTW3_100", full)
+    assert (device.name, device.device_type) == ("Petkit_CTW3_100", 24)
+
+    # The next advertisement carries no service data and a name that is in no table.
+    device = await _scan_and_identify(coordinator, "CTW3", {})
+    assert (device.name, device.device_type) == ("Petkit_CTW3_100", 24)
+    assert coordinator.is_ctw3
+
+
+async def test_scan_without_service_data_never_invents_a_w5(hass, loaded_entry):
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    device = await _scan_and_identify(coordinator, "Petkit_CTW3_NEW", {})
+    assert device.name == "Petkit_CTW3_NEW"
+    assert device.alias == "Unknown"
+    assert coordinator.is_ctw3
 
 
 @pytest.mark.parametrize(
