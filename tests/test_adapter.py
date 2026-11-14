@@ -175,3 +175,31 @@ async def test_reconnect_loop_backs_off_after_failed_notifications(adapter):
         assert await adapter._reconnection_loop(ADDRESS) is True
 
     assert sleeps and min(sleeps) >= 10.0
+
+
+async def test_next_outage_resets_at_attempt_50_again(adapter):
+    """A successful connection clears the reset marker along with the counter."""
+    adapter._last_reset_at = 50  # a reset at attempt 50 in an earlier outage
+    client = MagicMock()
+    client.disconnect = AsyncMock()
+    await _connect(adapter, client)
+    assert adapter._connection_attempts == 0
+    assert adapter._last_reset_at == 0
+
+    # The next outage reaches attempt 50 and resets there, not at 100.
+    adapter.connected_devices.clear()
+    adapter._connection_attempts = 50
+
+    async def connect(address):
+        adapter.connected_devices[address] = MagicMock()
+        return True
+
+    with (
+        patch.object(adapter, "_reset_ble_stack", AsyncMock()) as reset,
+        patch.object(adapter, "connect_device", side_effect=connect),
+        patch.object(adapter, "start_notifications", AsyncMock(return_value=True)),
+        patch(f"{ADAPTER}.asyncio.sleep", AsyncMock()),
+    ):
+        assert await adapter._reconnection_loop(ADDRESS) is True
+    assert reset.await_count == 1
+

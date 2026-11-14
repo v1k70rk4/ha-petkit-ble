@@ -216,6 +216,8 @@ class HABluetoothAdapter:
                 f"✅ Connected to {address} (attempt {self._connection_attempts + 1})"
             )
             self._connection_attempts = 0
+            # A new outage starts counting from zero, resets included.
+            self._last_reset_at = 0
             return True
 
         except asyncio.TimeoutError:
