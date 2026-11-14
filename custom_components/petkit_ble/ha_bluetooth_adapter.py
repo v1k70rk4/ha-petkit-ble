@@ -20,6 +20,14 @@ _LOGGER = logging.getLogger(__name__)
 # disconnect a client whose disconnect keeps failing.
 LEFTOVER_DISCONNECT_DELAYS = (1.0, 5.0, 15.0, 60.0)
 
+# Every this many failed attempts, the reconnect loop resets its BLE handles
+# and re-scans before the next attempt.
+RESET_EVERY = 50
+# Wait at least this long after a connection that came up without working
+# notifications. Reconnecting at full speed into a Bluetooth daemon that is
+# failing (or has just restarted) adds load where it can least take it.
+NOTIFY_FAILURE_DELAY = 10.0
+
 class ConnectionStatus(Enum):
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
@@ -48,6 +56,9 @@ class HABluetoothAdapter:
         self._connection_attempts = 0
         self._connection_error: str | None = None
         self._reconnect_lock = asyncio.Lock()
+        # The attempt count at the last BLE reset, so each multiple of
+        # RESET_EVERY resets once.
+        self._last_reset_at = 0
         # Reconnects started from the write path. They are tracked so that an
         # unload can cancel them; an untracked one would keep reconnecting and
         # hold the fountain's only connection after the entry is gone.
@@ -537,16 +548,26 @@ class HABluetoothAdapter:
             if self._connection_attempts % 5 == 0 or self._connection_attempts < 3:
                 self.logger.info(f"🔁 Reconnection attempt #{self._connection_attempts + 1}")
 
-            # Every 50 attempts, do a full BLE stack reset to recover from
-            # corrupted BlueZ state that no amount of retries can fix
-            if self._connection_attempts > 0 and self._connection_attempts % 50 == 0:
+            # Every RESET_EVERY attempts, reset the BLE handles and re-scan to
+            # recover from a corrupted BlueZ state. The attempt that follows
+            # runs right after it: a `continue` here would leave the counter
+            # on the multiple and reset forever without connecting again.
+            if (
+                self._connection_attempts > 0
+                and self._connection_attempts % RESET_EVERY == 0
+                and self._connection_attempts != self._last_reset_at
+            ):
+                self._last_reset_at = self._connection_attempts
                 self.logger.warning(
-                    f"🔄 {self._connection_attempts} failed attempts — resetting BLE stack"
+                    "%s failed attempts, resetting the Bluetooth connection",
+                    self._connection_attempts,
                 )
                 await self._reset_ble_stack(address)
                 await asyncio.sleep(10)  # Give BlueZ time to recover
-                continue
+                if self._closed:
+                    break
 
+            notify_failed = False
             if await self.connect_device(address):
                 # A connection without working notifications is useless (no data
                 # flows), so only count it as success if the subscribe works too.
@@ -560,8 +581,11 @@ class HABluetoothAdapter:
                 self.logger.warning("Reconnected but notifications failed; tearing down to retry")
                 await self._disconnect_client(address)
                 self._connection_attempts += 1
+                notify_failed = True
 
             delay = self._retry_delay()
+            if notify_failed:
+                delay = max(delay, NOTIFY_FAILURE_DELAY)
             if self._connection_attempts % 10 == 0:
                 self.logger.debug(f"Next retry in {delay:.1f}s (attempt #{self._connection_attempts})")
             await asyncio.sleep(delay)

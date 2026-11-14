@@ -117,3 +117,61 @@ async def test_cmd_213_payload_never_reaches_the_log(adapter, device, caplog):
     assert bytes(device_id).hex() not in caplog.text
     assert str(device_id) not in caplog.text
     assert str(device.device_id) not in caplog.text
+
+
+async def test_reconnect_loop_connects_again_after_a_ble_reset(adapter):
+    """At a multiple of RESET_EVERY the loop resets once, then tries to connect.
+
+    It used to `continue` after the reset with the counter unchanged, so it
+    reset every ten seconds and never tried to connect again.
+    """
+    adapter._connection_attempts = 50
+    connects = 0
+
+    async def connect(address):
+        nonlocal connects
+        connects += 1
+        if connects == 1:
+            adapter._connection_attempts += 1
+            return False
+        adapter.connected_devices[address] = MagicMock()
+        return True
+
+    async def reset_once(address):
+        # The old loop reset forever; fail instead of hanging the test.
+        if reset.await_count > 2:
+            raise AssertionError("reset again without a connection attempt")
+
+    with (
+        patch.object(adapter, "_reset_ble_stack", AsyncMock(side_effect=reset_once)) as reset,
+        patch.object(adapter, "connect_device", side_effect=connect),
+        patch.object(adapter, "start_notifications", AsyncMock(return_value=True)),
+        patch(f"{ADAPTER}.asyncio.sleep", AsyncMock()),
+    ):
+        assert await adapter._reconnection_loop(ADDRESS) is True
+
+    assert reset.await_count == 1
+    assert connects == 2
+
+
+async def test_reconnect_loop_backs_off_after_failed_notifications(adapter):
+    """A link without working notifications is retried after a pause, not at once."""
+    subscribed = iter([False, True])
+    sleeps: list[float] = []
+
+    async def connect(address):
+        adapter.connected_devices[address] = MagicMock()
+        return True
+
+    async def sleep(delay):
+        sleeps.append(delay)
+
+    with (
+        patch.object(adapter, "connect_device", side_effect=connect),
+        patch.object(adapter, "start_notifications", AsyncMock(side_effect=lambda *a: next(subscribed))),
+        patch.object(adapter, "_disconnect_client", AsyncMock(side_effect=lambda a: adapter.connected_devices.pop(a, None))),
+        patch(f"{ADAPTER}.asyncio.sleep", side_effect=sleep),
+    ):
+        assert await adapter._reconnection_loop(ADDRESS) is True
+
+    assert sleeps and min(sleeps) >= 10.0
