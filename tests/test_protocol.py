@@ -163,3 +163,36 @@ async def test_sequence_wraps_at_one_byte(device):
     first, second = (call.args[0] for call in ble.message_producer.await_args_list)
     assert first[5] == 255
     assert second[5] == 0
+
+
+async def test_lifetime_totals_hold_when_the_fountain_steps_back(handlers, device):
+    """After a reconnect the fountain resends an older total; the shown one holds."""
+    await handlers.handle_notification("s", frame(230, w5_status_payload(pump_runtime=83_520)))
+    energy = device.status["energy_consumed"]
+    water = device.status["purified_water"]
+
+    # A few minutes back, as seen after a reconnect: nothing goes down.
+    await handlers.handle_notification("s", frame(230, w5_status_payload(pump_runtime=82_757)))
+    await handlers.handle_notification("s", frame(210, w5_status_payload(pump_runtime=82_760)[:12]))
+    assert device.status["pump_runtime"] == 83_520
+    assert device.status["energy_consumed"] == energy
+    assert device.status["purified_water"] == water
+
+    # Once the fountain has caught up, the totals move on.
+    await handlers.handle_notification("s", frame(230, w5_status_payload(pump_runtime=83_600)))
+    assert device.status["pump_runtime"] == 83_600
+    assert float(device.status["energy_consumed"]) > float(energy)
+
+
+async def test_a_real_reset_of_the_lifetime_totals_is_taken(handlers, device):
+    """A drop of more than 10% is a reset (e.g. after a power loss), not a step back."""
+    await handlers.handle_notification("s", frame(230, w5_status_payload(pump_runtime=24_000)))
+    await handlers.handle_notification("s", frame(230, w5_status_payload(pump_runtime=13_000)))
+    assert device.status["pump_runtime"] == 13_000
+
+
+def test_serial_number_is_the_latin_1_text_of_its_field():
+    data = bytes([0, 0, 1, 2, 3, 4, 5, 6]) + b"20250411S10758" + bytes([0, 0xE9])
+    assert Utils.extract_serial_number(data) == "20250411S10758\x00"
+    assert Utils.extract_serial_number(list(data)) == "20250411S10758\x00"
+    assert Utils.extract_serial_number(bytes(range(256))) == "".join(map(chr, range(8, 23)))

@@ -141,15 +141,20 @@ class Utils:
 
     @staticmethod
     def extract_device_id(data):
-        bytes = data[2:8]  # Extract first 8 bytes for device ID
-        device_id = int.from_bytes(bytes, byteorder='big')
-        return Utils.bytes_to_unsigned_integers(bytes), device_id
+        """Return the 6 byte device id (payload bytes 2-7) as a list and as an integer."""
+        id_bytes = data[2:8]
+        device_id = int.from_bytes(id_bytes, byteorder='big')
+        return Utils.bytes_to_unsigned_integers(id_bytes), device_id
 
     @staticmethod
     def extract_serial_number(data):
-        bytes = data[8:23]  # Extract next 14 bytes for serial number
-        serial_number = ''.join(chr(b) for b in bytes)
-        return serial_number
+        """Return the serial number text (payload bytes 8-22).
+
+        The field is fixed width; the caller strips its NUL/space padding.
+        Latin-1 maps every byte to the character with the same code, so no
+        byte from the device can make the decoding fail.
+        """
+        return bytes(data[8:23]).decode("latin-1")
 
     # canculateWxEnergyForType
     # device.alias, device.type_code, 

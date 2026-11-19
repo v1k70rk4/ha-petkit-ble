@@ -1,4 +1,13 @@
 from .utils import Utils
+
+# Lifetime totals that only ever grow, and the values derived from them.
+LIFETIME_TOTALS = ("pump_runtime", "pump_runtime_readable", "purified_water", "energy_consumed")
+# After a reconnect the fountain reports the total it last stored, a few
+# minutes behind what it already sent. A drop up to this share of the total is
+# such a step back, and the shown totals hold until the fountain catches up;
+# a bigger one is a real reset (e.g. after a power loss) and is taken. Home
+# Assistant's recorder uses the same 10% to tell a glitch from a meter reset.
+STEP_BACK_SHARE = 0.1
 from .parsers import Parsers
 
 class EventHandlers:
@@ -23,6 +32,19 @@ class EventHandlers:
             "device_type": self.device.device_type,
             "name": self.device.name,
         }
+
+    def _hold_lifetime_totals(self, data):
+        """Keep the lifetime totals when the fountain steps back after a reconnect."""
+        new = data.get("pump_runtime")
+        shown = self.device.status.get("pump_runtime")
+        if not isinstance(new, int) or not isinstance(shown, int):
+            return data
+        if (1 - STEP_BACK_SHARE) * shown <= new < shown:
+            self.logger.debug(
+                "Pump runtime stepped back from %s to %s; keeping the totals", shown, new
+            )
+            return {key: value for key, value in data.items() if key not in LIFETIME_TOTALS}
+        return data
 
     async def handle_notification(self, sender, message):
         parsed_data = Utils.parse_bytearray(message)
@@ -62,6 +84,7 @@ class EventHandlers:
 
             # Update status
             if cmd in [66, 210, 211, 230]:
+                data = self._hold_lifetime_totals(data)
                 self.device.status = data
             # Writes resend every field, so only a complete answer (child lock
             # byte included) makes them safe; a short one blocks them again.
