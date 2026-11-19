@@ -1,3 +1,4 @@
+from .parsers import Parsers
 from .utils import Utils
 
 # Lifetime totals that only ever grow, and the values derived from them.
@@ -8,7 +9,6 @@ LIFETIME_TOTALS = ("pump_runtime", "pump_runtime_readable", "purified_water", "e
 # a bigger one is a real reset (e.g. after a power loss) and is taken. Home
 # Assistant's recorder uses the same 10% to tell a glitch from a meter reset.
 STEP_BACK_SHARE = 0.1
-from .parsers import Parsers
 
 class EventHandlers:
     def __init__(self, device, commands, logger):
