@@ -196,3 +196,15 @@ def test_serial_number_is_the_latin_1_text_of_its_field():
     assert Utils.extract_serial_number(data) == "20250411S10758\x00"
     assert Utils.extract_serial_number(list(data)) == "20250411S10758\x00"
     assert Utils.extract_serial_number(bytes(range(256))) == "".join(map(chr, range(8, 23)))
+
+
+async def test_a_step_back_still_fills_totals_that_have_no_value_yet(handlers, device):
+    """A CMD 210 frame sets only the runtime; the first CMD 230 still brings energy and water."""
+    await handlers.handle_notification("s", frame(210, w5_status_payload(pump_runtime=83_520)[:12]))
+    assert device.status["energy_consumed"] is None
+
+    await handlers.handle_notification("s", frame(230, w5_status_payload(pump_runtime=83_400)))
+    assert device.status["pump_runtime"] == 83_520
+    assert device.status["energy_consumed"] is not None
+    assert device.status["purified_water"] is not None
+

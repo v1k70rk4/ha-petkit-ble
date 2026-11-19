@@ -43,7 +43,14 @@ class EventHandlers:
             self.logger.debug(
                 "Pump runtime stepped back from %s to %s; keeping the totals", shown, new
             )
-            return {key: value for key, value in data.items() if key not in LIFETIME_TOTALS}
+            # Only what is already shown is held: a total that has no value
+            # yet (e.g. energy after a CMD 210 frame alone) takes this one.
+            shown_totals = self.device.status
+            return {
+                key: value
+                for key, value in data.items()
+                if key not in LIFETIME_TOTALS or shown_totals.get(key) is None
+            }
         return data
 
     async def handle_notification(self, sender, message):
