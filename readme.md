@@ -1,11 +1,17 @@
-# Petkit BLE Water Fountain — Home Assistant Integration
+<p align="center">
+  <img src="https://raw.githubusercontent.com/v1k70rk4/ha-petkit-ble/main/custom_components/petkit_ble/brand/logo%402x.png" width="600" alt="Petkit BLE Water Fountain logo">
+</p>
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
-[![GitHub Release][releases-shield]][releases]
-[![GitHub Activity][commits-shield]][commits]
-[![License][license-shield]](LICENSE)
-![Maintenance][maintenance-shield]
-[![Ko-fi][kofi-shield]][kofi]
+<p align="center">
+  <a href="https://github.com/v1k70rk4/ha-petkit-ble/releases/latest"><img src="https://img.shields.io/github/v/release/v1k70rk4/ha-petkit-ble?label=version&color=41bdf5" alt="Version"></a>
+  <img src="https://img.shields.io/badge/Marketplace-Custom-orange" alt="Marketplace: custom repository">
+  <img src="https://img.shields.io/badge/Home%20Assistant-2026.8%2B-41BDF5?logo=homeassistant&logoColor=white" alt="Home Assistant 2026.8+">
+  <img src="https://img.shields.io/badge/Bluetooth%20LE-100%25%20local-0082FC?logo=bluetooth&logoColor=white" alt="Bluetooth LE, 100% local">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
+  <a href="https://ko-fi.com/v1k70rk4"><img src="https://img.shields.io/badge/Ko--fi-support%20the%20project-FF5E5B?logo=kofi&logoColor=white" alt="Ko-fi"></a>
+</p>
+
+# Petkit BLE Water Fountain — Home Assistant Integration
 
 > **100% local BLE control** for Petkit water fountains — no cloud, no app, no compromises.
 
@@ -43,16 +49,26 @@
 > assets locally (local brand images, added in 2026.3) and uses the per-config-entry
 > device registry lookups added in 2026.8.
 
-### HACS (Recommended)
+### Install from the Marketplace (recommended)
 
-1. Open [HACS](https://hacs.xyz/) and search for **Petkit BLE Water Fountain**
-2. **Download** → restart Home Assistant
-3. **Settings** → **Devices & services** → the fountain is discovered over Bluetooth;
-   or **Add Integration** → search **Petkit BLE**
+[![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=v1k70rk4&repository=ha-petkit-ble&category=integration)
 
-> Not in the HACS search yet? Until it is in the default catalog, add it as a custom
-> repository: **⋮** → **Custom repositories** → `https://github.com/v1k70rk4/ha-petkit-ble`,
-> category **Integration**.
+1. Open **Settings → Marketplace** (HACS in the sidebar before 2026.11) and search for
+   **Petkit BLE Water Fountain** — or click the button above.
+2. **Download** the integration.
+3. **Restart** Home Assistant.
+4. **Add the fountain.** It is discovered over Bluetooth: it turns up under **Discovered**
+   at the top of **Settings → Devices & services**, click **Add** on that card.
+   Or click the button below (**Settings → Devices & services → Add integration → Petkit BLE**):
+
+   [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=petkit_ble)
+
+> **Not in the Marketplace search yet?** It is on its way into the default list. Until
+> then the first button adds it as a custom repository, or add it by hand:
+> **⋮ → Custom repositories** → `https://github.com/v1k70rk4/ha-petkit-ble`, type **Integration**.
+
+Close the Petkit app on your phone first: the fountain takes only one Bluetooth
+connection at a time.
 
 ### Manual
 
@@ -318,14 +334,3 @@ MIT — see [LICENSE](LICENSE) for details.
 - Inspired by [RobertD502's Petkit integration](https://github.com/RobertD502/homeassistant-petkit) and [petkitaio](https://github.com/RobertD502/petkitaio)
 - BLE protocol analysis from [PetKit Eversweet Pro 3 research](https://colab.research.google.com/drive/1gWwLz1Wi_WujvvSaTJpPMW5i3YideSAb)
 - Dutch & Ukrainian translations based on [aavdberg/ha-petkit](https://github.com/aavdberg/ha-petkit)
-
----
-
-[commits-shield]: https://img.shields.io/github/commit-activity/y/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
-[commits]: https://github.com/v1k70rk4/ha-petkit-ble/commits/main
-[kofi-shield]: https://img.shields.io/badge/Ko--fi-support-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white
-[kofi]: https://ko-fi.com/v1k70rk4
-[license-shield]: https://img.shields.io/github/license/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
-[maintenance-shield]: https://img.shields.io/badge/maintainer-%40v1k70rk4-blue.svg?style=for-the-badge
-[releases-shield]: https://img.shields.io/github/release/v1k70rk4/ha-petkit-ble.svg?style=for-the-badge
-[releases]: https://github.com/v1k70rk4/ha-petkit-ble/releases
