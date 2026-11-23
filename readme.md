@@ -8,6 +8,7 @@
   <img src="https://img.shields.io/badge/Home%20Assistant-2026.8%2B-41BDF5?logo=homeassistant&logoColor=white" alt="Home Assistant 2026.8+">
   <img src="https://img.shields.io/badge/Bluetooth%20LE-100%25%20local-0082FC?logo=bluetooth&logoColor=white" alt="Bluetooth LE, 100% local">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
+  <a href="https://ko-fi.com/v1k70rk4"><img src="https://img.shields.io/badge/Ko--fi-support%20the%20project-FF5E5B?logo=kofi&logoColor=white" alt="Ko-fi"></a>
 </p>
 
 # Petkit BLE Water Fountain — Home Assistant Integration
