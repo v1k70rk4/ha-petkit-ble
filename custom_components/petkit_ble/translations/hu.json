@@ -223,6 +223,9 @@
     },
     "model_unknown": {
       "message": "Az itató típusa még nem ismert. Próbáld újra néhány perc múlva."
+    },
+    "status_not_received": {
+      "message": "Az itató még nem küldte el a bekapcsolt állapotát és a módját. Próbáld újra, ha már csatlakozott."
     }
   },
   "issues": {

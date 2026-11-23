@@ -223,6 +223,9 @@
     },
     "model_unknown": {
       "message": "Het model van de fontein is nog niet bekend. Probeer het over een paar minuten opnieuw."
+    },
+    "status_not_received": {
+      "message": "De fontein heeft zijn aan/uit-status en modus nog niet doorgegeven. Probeer het opnieuw zodra hij verbonden is."
     }
   },
   "issues": {

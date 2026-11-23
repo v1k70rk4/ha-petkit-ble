@@ -519,7 +519,23 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
     # ── Public actions ─────────────────────────────────────────────
 
+    @property
+    def mode_writable(self) -> bool:
+        """Return True when a CMD 220 power/mode write is safe to send.
+
+        The write carries both the power state and the mode. Until a status
+        frame has arrived on this connection, the one not being changed would
+        be the initial 0: turning on smart mode would switch the pump off.
+        """
+        return self.device.status_received and bool(
+            self.ble_manager.connected_devices.get(self.address)
+        )
+
     async def async_set_device_mode(self, state: int, mode: int) -> None:
+        if not self.mode_writable:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="status_not_received"
+            )
         await self.commands.set_device_mode(state, mode)
 
     async def async_reset_filter(self) -> None:

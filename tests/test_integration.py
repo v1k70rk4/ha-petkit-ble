@@ -153,3 +153,50 @@ async def test_options_flow_bounds_the_update_interval(hass, loaded_entry):
         )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert loaded_entry.options["update_interval"] == 30
+
+
+async def test_power_and_mode_writes_wait_for_a_status_frame(hass, loaded_entry):
+    """Before CMD 210/230, a CMD 220 write would send power 0 or mode 0."""
+    from .conftest import w5_status_payload
+
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    producer = make_writable(coordinator)
+    coordinator.device.status_received = False
+
+    assert coordinator.mode_writable is False
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_set_device_mode(1, 2)
+    assert err.value.translation_key == "status_not_received"
+    producer.assert_not_awaited()
+
+    await coordinator.event_handlers.handle_notification("s", frame(230, w5_status_payload()))
+    assert coordinator.mode_writable is True
+    await coordinator.async_set_device_mode(1, 2)
+    producer.assert_awaited_once()
+
+
+async def test_power_and_mode_entities_are_unavailable_until_the_status_is_known(
+    hass, loaded_entry
+):
+    from homeassistant.helpers import entity_registry as er
+
+    coordinator = hass.data[DOMAIN][loaded_entry.entry_id]
+    make_writable(coordinator)
+    coordinator.device.status_received = False
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+
+    entity_ids = [
+        entity.entity_id
+        for entity in er.async_entries_for_config_entry(er.async_get(hass), loaded_entry.entry_id)
+        if entity.domain == "switch" and entity.unique_id.endswith(("_power", "_smart_mode"))
+    ]
+    assert len(entity_ids) == 2
+    for entity_id in entity_ids:
+        assert hass.states.get(entity_id).state == "unavailable"
+
+    coordinator.device.status_received = True
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    for entity_id in entity_ids:
+        assert hass.states.get(entity_id).state != "unavailable"

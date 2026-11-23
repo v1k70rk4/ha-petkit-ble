@@ -45,9 +45,14 @@
 
 ### HACS (Recommended)
 
-1. Open [HACS](https://hacs.xyz/) → **Integrations**
-2. **⋮** → **Custom repositories** → paste `https://github.com/v1k70rk4/ha-petkit-ble` → category **Integration**
-3. Find **Petkit BLE Water Fountain** → **Install** → restart HA
+1. Open [HACS](https://hacs.xyz/) and search for **Petkit BLE Water Fountain**
+2. **Download** → restart Home Assistant
+3. **Settings** → **Devices & services** → the fountain is discovered over Bluetooth;
+   or **Add Integration** → search **Petkit BLE**
+
+> Not in the HACS search yet? Until it is in the default catalog, add it as a custom
+> repository: **⋮** → **Custom repositories** → `https://github.com/v1k70rk4/ha-petkit-ble`,
+> category **Integration**.
 
 ### Manual
 

@@ -53,7 +53,16 @@ class PetkitSwitchBase(CoordinatorEntity[PetkitBLECoordinator], SwitchEntity):
             "sw_version": str(self.coordinator.device.firmware) if self.coordinator.device.firmware else "Unknown",
         }
 
-class PetkitPowerSwitch(PetkitSwitchBase):
+class PetkitModeSwitchBase(PetkitSwitchBase):
+    """Base class for switches that send power and mode together (CMD 220)."""
+
+    @property
+    def available(self) -> bool:
+        """Unavailable until this connection's status (power and mode) is known."""
+        return super().available and self.coordinator.mode_writable
+
+
+class PetkitPowerSwitch(PetkitModeSwitchBase):
     """Power switch for the water fountain."""
 
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
@@ -84,7 +93,7 @@ class PetkitPowerSwitch(PetkitSwitchBase):
         self.coordinator.device._power_status = POWER_OFF
         self.async_write_ha_state()
 
-class PetkitSmartModeSwitch(PetkitSwitchBase):
+class PetkitSmartModeSwitch(PetkitModeSwitchBase):
     """Smart mode switch for the water fountain."""
 
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:

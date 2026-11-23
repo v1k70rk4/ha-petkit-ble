@@ -5,6 +5,10 @@ class Device:
         # True once the device has answered CMD 211, so a config write never
         # sends defaults in place of the real settings.
         self.config_received = False
+        # True once a status frame (CMD 210 or 230) has arrived on the current
+        # connection. A power or mode write (CMD 220) sends both values, so it
+        # waits for the real ones instead of the initial zeros.
+        self.status_received = False
         self.device_id = 0
         self.device_id_bytes = []
         self.serial = "Uninitialized"
