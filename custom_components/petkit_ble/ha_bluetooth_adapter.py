@@ -209,6 +209,8 @@ class HABluetoothAdapter:
             # Settings may have changed while the link was down; config writes
             # wait for a fresh CMD 211 answer on this connection.
             self.event_handler.device.config_received = False
+            # Power and mode writes wait for this connection's status frame too.
+            self.event_handler.device.status_received = False
             self.connected_devices[address] = client
             self._set_status(ConnectionStatus.CONNECTED)
             self._touch()

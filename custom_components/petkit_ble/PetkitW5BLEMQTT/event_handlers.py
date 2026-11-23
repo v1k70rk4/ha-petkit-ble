@@ -97,5 +97,7 @@ class EventHandlers:
             # byte included) makes them safe; a short one blocks them again.
             if cmd == 211:
                 self.device.config_received = data.get("is_locked") is not None
+            if cmd in (210, 230) and "power_status" in data and "mode" in data:
+                self.device.status_received = True
 
         return parsed_data

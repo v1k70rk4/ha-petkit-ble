@@ -203,3 +203,11 @@ async def test_next_outage_resets_at_attempt_50_again(adapter):
         assert await adapter._reconnection_loop(ADDRESS) is True
     assert reset.await_count == 1
 
+
+async def test_connect_resets_the_status_received_flag(adapter, device):
+    """A new connection waits for its own status frame before power/mode writes."""
+    device.status_received = True
+    client = MagicMock()
+    client.disconnect = AsyncMock()
+    await _connect(adapter, client)
+    assert device.status_received is False

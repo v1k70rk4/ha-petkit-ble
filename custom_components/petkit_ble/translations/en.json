@@ -223,6 +223,9 @@
     },
     "model_unknown": {
       "message": "The fountain model is not known yet. Try again in a few minutes."
+    },
+    "status_not_received": {
+      "message": "The fountain has not reported its power and mode yet. Try again once it is connected."
     }
   },
   "issues": {

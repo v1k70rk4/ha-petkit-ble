@@ -43,6 +43,11 @@ class PetkitModeSelect(CoordinatorEntity[PetkitBLECoordinator], SelectEntity):
         self._attr_unique_id = f"{device_id}_mode"
 
     @property
+    def available(self) -> bool:
+        """Unavailable until this connection's status (power and mode) is known."""
+        return super().available and self.coordinator.mode_writable
+
+    @property
     def device_info(self) -> DeviceInfo:
         device_id = self.coordinator.device.serial if self.coordinator.device.serial != "Uninitialized" else self.coordinator.address
         device_name = self.coordinator.device.name_readable if self.coordinator.device.name_readable != "Uninitialized" else "Water Fountain"
