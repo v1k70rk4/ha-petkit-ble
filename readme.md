@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/v1k70rk4/ha-petkit-ble/releases/latest"><img src="https://img.shields.io/github/v/release/v1k70rk4/ha-petkit-ble?label=version&color=41bdf5" alt="Version"></a>
-  <img src="https://img.shields.io/badge/Marketplace-Custom-orange" alt="Marketplace: custom repository">
+  <img src="https://img.shields.io/badge/Marketplace-Default-41BDF5" alt="Marketplace Default">
   <img src="https://img.shields.io/badge/Home%20Assistant-2026.8%2B-41BDF5?logo=homeassistant&logoColor=white" alt="Home Assistant 2026.8+">
   <img src="https://img.shields.io/badge/Bluetooth%20LE-100%25%20local-0082FC?logo=bluetooth&logoColor=white" alt="Bluetooth LE, 100% local">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
@@ -51,6 +51,8 @@
 
 ### Install from the Marketplace (recommended)
 
+This integration is in the **Marketplace** — no custom repository needed.
+
 [![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=v1k70rk4&repository=ha-petkit-ble&category=integration)
 
 1. Open **Settings → Marketplace** (HACS in the sidebar before 2026.11) and search for
@@ -62,10 +64,6 @@
    Or click the button below (**Settings → Devices & services → Add integration → Petkit BLE**):
 
    [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=petkit_ble)
-
-> **Not in the Marketplace search yet?** It is on its way into the default list. Until
-> then the first button adds it as a custom repository, or add it by hand:
-> **⋮ → Custom repositories** → `https://github.com/v1k70rk4/ha-petkit-ble`, type **Integration**.
 
 Close the Petkit app on your phone first: the fountain takes only one Bluetooth
 connection at a time.
