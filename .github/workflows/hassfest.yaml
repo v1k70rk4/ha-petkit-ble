@@ -17,7 +17,4 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Home Assistant publishes hassfest on its master branch only (its one release, 1.0.0, is
-      # years old), so this is pinned to a master commit; Dependabot cannot follow a branch,
-      # move it by hand now and then.
-      - uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master 2026-09-27
+      - uses: home-assistant/actions/hassfest@07f46fd2e19967768b5fd3000f91f857452b767c # 2026.11.0
